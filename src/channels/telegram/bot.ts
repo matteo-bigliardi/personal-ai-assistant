@@ -1,0 +1,56 @@
+import { Bot } from "grammy";
+import type { Agent } from "../../agent/agent.js";
+import type { Logger } from "../../observability/logger.js";
+
+export interface TelegramBotOptions {
+  token: string;
+  /** Numeric Telegram user IDs allowed to interact with the bot. */
+  allowedUserIds: number[];
+  agent: Agent;
+  logger: Logger;
+}
+
+/**
+ * Telegram transport (grammY, long polling in V1). This layer only handles
+ * transport, the allowlist and delegating to the agent. No domain logic here.
+ */
+export function createTelegramBot(opts: TelegramBotOptions): Bot {
+  const { token, allowedUserIds, agent, logger } = opts;
+  const bot = new Bot(token);
+  const allowed = new Set(allowedUserIds);
+
+  // Allowlist guard: reject any user not explicitly permitted.
+  bot.use(async (ctx, next) => {
+    const userId = ctx.from?.id;
+    if (userId === undefined || !allowed.has(userId)) {
+      logger.warn("telegram.unauthorized", { userId });
+      if (ctx.chat) await ctx.reply("Not authorized.");
+      return;
+    }
+    await next();
+  });
+
+  bot.command("start", (ctx) => ctx.reply("Assistant online. How can I help?"));
+
+  bot.on("message:text", async (ctx) => {
+    const text = ctx.message.text;
+    try {
+      await ctx.replyWithChatAction("typing");
+      const reply = await agent.handleMessage(text);
+      await ctx.reply(reply);
+    } catch (err) {
+      logger.error("telegram.handler_error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await ctx.reply("Something went wrong handling that message.");
+    }
+  });
+
+  bot.catch((err) => {
+    logger.error("telegram.bot_error", {
+      error: err.error instanceof Error ? err.error.message : String(err.error),
+    });
+  });
+
+  return bot;
+}
