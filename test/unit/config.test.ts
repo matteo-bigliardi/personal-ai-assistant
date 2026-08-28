@@ -12,7 +12,7 @@ describe("loadConfig", () => {
     const cfg = loadConfig({ ...base } as NodeJS.ProcessEnv);
     expect(cfg.TZ).toBe("Europe/Rome");
     expect(cfg.HTTP_PORT).toBe(3000);
-    expect(cfg.ANTHROPIC_MODEL).toBe("claude-sonnet-4-6");
+    expect(cfg.ANTHROPIC_MODEL).toBe("claude-sonnet-5");
   });
 
   it("parses the allowlist CSV into positive integers", () => {
@@ -24,8 +24,8 @@ describe("loadConfig", () => {
   });
 
   it("throws when a required variable is missing", () => {
-    expect(() =>
-      loadConfig({ DATABASE_URL: base.DATABASE_URL } as NodeJS.ProcessEnv),
-    ).toThrow(/Invalid configuration/);
+    expect(() => loadConfig({ DATABASE_URL: base.DATABASE_URL } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid configuration/,
+    );
   });
 });

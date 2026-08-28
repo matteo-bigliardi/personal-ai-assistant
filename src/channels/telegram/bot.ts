@@ -19,9 +19,18 @@ export function createTelegramBot(opts: TelegramBotOptions): Bot {
   const bot = new Bot(token);
   const allowed = new Set(allowedUserIds);
 
-  // Allowlist guard: reject any user not explicitly permitted.
+  // Allowlist guard: reject any user not explicitly permitted, and answer only
+  // in private chats. Anyone can add a bot to a group without the owner's
+  // consent; without the chat-type check an allowlisted user writing in a group
+  // would have the assistant post their agenda and tasks to everyone there.
   bot.use(async (ctx, next) => {
     const userId = ctx.from?.id;
+    const chatType = ctx.chat?.type;
+
+    if (chatType !== undefined && chatType !== "private") {
+      logger.warn("telegram.rejected_non_private_chat", { chatType, userId });
+      return;
+    }
     if (userId === undefined || !allowed.has(userId)) {
       logger.warn("telegram.unauthorized", { userId });
       if (ctx.chat) await ctx.reply("Not authorized.");

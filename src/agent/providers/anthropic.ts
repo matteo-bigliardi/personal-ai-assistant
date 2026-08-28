@@ -9,7 +9,7 @@ export interface AnthropicProviderOptions {
 
 /**
  * Anthropic implementation of the LlmProvider boundary.
- * Fase 1: plain text turn (no tool use yet). Tool support is added in Fase 2
+ * Currently a plain text turn with no tool use; tool support is added later
  * without changing the public interface.
  */
 export function createAnthropicProvider(opts: AnthropicProviderOptions): LlmProvider {

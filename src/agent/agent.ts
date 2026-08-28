@@ -14,9 +14,9 @@ export interface Agent {
 }
 
 /**
- * Fase 1 agent loop: single conversational turn (no tools yet).
- * Later phases add the typed-tool loop with bounded iterations. All side
- * effects stay outside the LLM.
+ * Agent loop: currently a single conversational turn, with no tools wired up.
+ * The typed-tool loop with bounded iterations lands next. All side effects stay
+ * outside the LLM.
  */
 export function createAgent(provider: LlmProvider, logger: Logger): Agent {
   return {

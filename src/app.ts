@@ -2,6 +2,8 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { loadConfig } from "./config/index.js";
 import { createLogger } from "./observability/logger.js";
+import { createDb } from "./db/client.js";
+import { runMigrations } from "./db/migrate.js";
 import { createAnthropicProvider } from "./agent/providers/anthropic.js";
 import { createAgent } from "./agent/agent.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
@@ -9,6 +11,13 @@ import { createTelegramBot } from "./channels/telegram/bot.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.LOG_LEVEL);
+
+  // Fail fast if Postgres is unreachable, then bring the schema up to date.
+  // Single-user app: migrating on boot keeps `docker compose up` reproducible.
+  const database = createDb(config.DATABASE_URL);
+  await database.ping();
+  await runMigrations(database.db);
+  logger.info("db.ready");
 
   const provider = createAnthropicProvider({
     apiKey: config.ANTHROPIC_API_KEY,
@@ -25,7 +34,15 @@ async function main(): Promise<void> {
 
   // Minimal HTTP surface: health check only (Telegram uses long polling in V1).
   const http = new Hono();
-  http.get("/health", (c) => c.json({ status: "ok", ts: new Date().toISOString() }));
+  http.get("/health", async (c) => {
+    try {
+      await database.ping();
+    } catch (err) {
+      logger.error("health.db_unreachable", { error: String(err) });
+      return c.json({ status: "degraded", db: "unreachable" }, 503);
+    }
+    return c.json({ status: "ok", db: "ok", ts: new Date().toISOString() });
+  });
 
   const server = serve({ fetch: http.fetch, port: config.HTTP_PORT }, (info) => {
     logger.info("http.listening", { port: info.port });
@@ -40,6 +57,7 @@ async function main(): Promise<void> {
     logger.info("shutdown", { signal });
     await bot.stop();
     server.close();
+    await database.close();
     process.exit(0);
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));

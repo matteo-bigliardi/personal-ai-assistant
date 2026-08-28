@@ -28,7 +28,7 @@ const schema = z.object({
   TELEGRAM_ALLOWED_USER_IDS: csvNumbers,
 
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
-  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-6"),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
 });
 
 export type Config = z.infer<typeof schema>;

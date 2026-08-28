@@ -5,10 +5,10 @@
   "type": "module",
   "description": "Personal AI assistant over Telegram: projects, tasks, time tracking, reminders and Google Calendar.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "dev": "tsx watch src/app.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/app.ts",
     "start": "node dist/app.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -17,28 +17,28 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "drizzle-orm": "^0.36.4",
+    "@anthropic-ai/sdk": "^0.121.0",
+    "@hono/node-server": "^1.13.7",
+    "drizzle-orm": "^0.45.2",
     "grammy": "^1.31.0",
     "hono": "^4.6.14",
-    "@hono/node-server": "^1.13.7",
     "pg": "^8.13.1",
-    "pg-boss": "^10.1.5",
+    "pg-boss": "^12.28.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
-    "drizzle-kit": "^0.28.1",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.17.0",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.11"
   }
 }
