@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidTimeZone } from "../domain/datetime.js";
 
 /**
  * Typed, validated configuration loaded once at startup from environment variables.
@@ -20,9 +21,14 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   HTTP_PORT: z.coerce.number().int().positive().default(3000),
-  TZ: z.string().default("Europe/Rome"),
+  // Every relative date the assistant resolves depends on this, so an
+  // unrecognised identifier must fail at startup, not at the first reminder.
+  TZ: z
+    .string()
+    .default("Europe/Rome")
+    .refine(isValidTimeZone, { message: "must be a valid IANA timezone, e.g. Europe/Rome" }),
 
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
   TELEGRAM_ALLOWED_USER_IDS: csvNumbers,

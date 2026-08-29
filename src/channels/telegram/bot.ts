@@ -45,7 +45,9 @@ export function createTelegramBot(opts: TelegramBotOptions): Bot {
     const text = ctx.message.text;
     try {
       await ctx.replyWithChatAction("typing");
-      const reply = await agent.handleMessage(text);
+      // The chat id scopes the short conversational memory; in a single-user
+      // deployment there is exactly one, but the agent must not assume that.
+      const reply = await agent.handleMessage({ chatId: String(ctx.chat.id), text });
       await ctx.reply(reply);
     } catch (err) {
       logger.error("telegram.handler_error", {

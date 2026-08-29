@@ -6,6 +6,10 @@ import { createDb } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { createAnthropicProvider } from "./agent/providers/anthropic.js";
 import { createAgent } from "./agent/agent.js";
+import { createToolRegistry } from "./agent/tool-registry.js";
+import { createProjectTools } from "./agent/tools/projects.js";
+import { createProjectsRepository } from "./db/repositories/projects.js";
+import { createProjectsService } from "./domain/projects/service.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 
 async function main(): Promise<void> {
@@ -23,7 +27,20 @@ async function main(): Promise<void> {
     apiKey: config.ANTHROPIC_API_KEY,
     model: config.ANTHROPIC_MODEL,
   });
-  const agent = createAgent(provider, logger);
+
+  // Composition root: repositories -> domain services -> typed tools. Each
+  // layer only knows the one below it, so the domain stays free of Telegram
+  // and of the model.
+  const projectsService = createProjectsService(createProjectsRepository(database.db));
+  const tools = createToolRegistry([...createProjectTools(projectsService, config.TZ)], logger);
+
+  const agent = createAgent({
+    provider,
+    tools,
+    logger,
+    timeZone: config.TZ,
+  });
+  logger.info("agent.ready", { tools: tools.specs.map((t) => t.name) });
 
   const bot = createTelegramBot({
     token: config.TELEGRAM_BOT_TOKEN,
