@@ -7,7 +7,9 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Development follows a phased plan tracked internally.
+**In progress.** Projects are implemented end to end — the agent loop, the typed
+tool boundary and the project tools all work over Telegram. Tasks, time
+tracking, reminders and Calendar are next.
 
 ## Stack
 
@@ -37,6 +39,35 @@ Design invariants:
   so it cannot fail on a model error or a rate limit.
 - **Destructive actions require confirmation.** Reads and low-risk writes execute
   directly; deletions and bulk changes ask first.
+- **The agent owns the loop, not the provider.** A provider performs exactly one
+  round trip and never executes anything: it reports which tools the model asked
+  for and returns. Validation, execution and every side effect stay in the
+  agent, so swapping in a different inference backend cannot change what the
+  assistant is allowed to do.
+
+### Agent loop
+
+```
+message → provider (one round trip) → validate arguments → execute tools
+        → feed results back → … (bounded) → final answer
+```
+
+Each tool is one zod schema, used both to advertise a JSON Schema to the model
+and to validate what comes back. A failure is a structured result the model can
+read and correct, not an exception: domain errors reach it verbatim, unexpected
+faults are logged and reported as opaque.
+
+Two properties keep the running cost predictable. The system prompt and tool
+definitions form a **cached prefix**, so nothing volatile may go in them — the
+current time is prepended to the user message instead. And the model never does
+calendar arithmetic: it receives the current instant and the next seven dates
+computed from the real clock, and may only pass back absolute ISO-8601 instants,
+which are re-validated before anything is persisted.
+
+Conversational history is deliberately thin. The database is the assistant's
+memory; the transcript exists only to resolve "mark that one done". Completed
+exchanges are kept in memory, bounded and never persisted, and intermediate tool
+traffic is discarded once a turn ends.
 
 ## Local development
 
@@ -80,19 +111,39 @@ is unreachable.
 | `npm run db:generate` | Generate a migration from `src/db/schema.ts`    |
 | `npm run db:migrate`  | Apply pending migrations (also done at startup) |
 
+Integration tests need Postgres. They never touch `DATABASE_URL` itself: the URL
+is redirected to a sibling database suffixed `_test`, created on demand, so
+running the suite cannot destroy real data. With no server reachable they skip
+rather than fail.
+
+`scripts/agent-smoke.ts` sends messages through the real stack (model, database,
+tools) without Telegram, which is handy when adding a tool:
+
+```bash
+npx tsx --env-file-if-exists=.env scripts/agent-smoke.ts "create project Atlas"
+```
+
 ## Data model
 
 `projects`, `tasks` and `work_sessions` live in Postgres and are authoritative.
 All instants are stored as `timestamptz` in UTC; user input is interpreted in
 the configured timezone (`TZ`, default `Europe/Rome`) and resolved to an
 absolute instant before persistence. Two invariants are enforced by the database
-rather than by application code: at most one running work timer, and
-`tasks.completed_at` set exactly when a task is `done`.
+rather than by application code: at most one running work timer,
+`tasks.completed_at` set exactly when a task is `done`, and project names unique
+regardless of casing, since chat refers to projects by name.
+
+Project status carries behaviour rather than being a label: `active` is what
+the briefing will consider, `paused` is a deliberate hold that stays listed with
+its tasks intact, and `archived` is the soft delete — there is no
+`delete_project`. Listings hide archived projects by default and nothing else.
+
+Domain timestamps come from the application clock, not from column defaults: a
+default `now()` is the transaction start time on the database host, which is a
+different machine under Docker, and mixing the two can place an `updated_at`
+before its own `created_at`.
 
 ## Security
-
-No personal data is committed: `.env`, tokens, OAuth secrets and personal
-Telegram IDs stay out of Git, and fixtures and evals are synthetic.
 
 Access control: the bot answers only in private chats, and only to the numeric
 Telegram user IDs listed in `TELEGRAM_ALLOWED_USER_IDS` — an empty allowlist
