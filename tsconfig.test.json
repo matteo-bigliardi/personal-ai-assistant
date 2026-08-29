@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  // `exclude` is inherited, and the base config excludes `test`, which would
+  // silently win over `include` and leave the tests unchecked.
+  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "*.config.ts", "drizzle.config.ts"]
+}
