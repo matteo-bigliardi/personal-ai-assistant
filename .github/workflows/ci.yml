@@ -12,6 +12,29 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+
+    # Integration tests assert on database-level invariants (unique indexes,
+    # CHECK constraints), so CI runs a real Postgres rather than skipping them.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: assistant
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_DB: assistant
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assistant -d assistant"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # The suite never uses this database directly: it creates and truncates a
+      # sibling suffixed `_test`.
+      DATABASE_URL: postgres://assistant:ci-only-not-a-secret@localhost:5432/assistant
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
