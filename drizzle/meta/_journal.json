@@ -8,6 +8,13 @@
       "when": 1787857701627,
       "tag": "0000_icy_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788203609809,
+      "tag": "0001_lucky_black_bolt",
+      "breakpoints": true
     }
   ]
 }
