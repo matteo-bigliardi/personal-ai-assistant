@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  endOfDay,
   formatHuman,
   formatInstant,
   formatNowBlock,
   isValidTimeZone,
+  parseDueAt,
   parseInstant,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
 } from "../../src/domain/datetime.js";
 import { InvalidInputError } from "../../src/domain/errors.js";
 
@@ -108,5 +113,106 @@ describe("isValidTimeZone", () => {
     expect(isValidTimeZone(ROME)).toBe(true);
     expect(isValidTimeZone("UTC")).toBe(true);
     expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+  });
+});
+
+/**
+ * Period boundaries are shared ground: task deadlines need the end of a day,
+ * and time reporting needs the start of a day, week and month. Every case here
+ * is stated as the instant a clock in Rome shows, because that is the only
+ * thing the user ever means.
+ */
+describe("period boundaries", () => {
+  it("opens the day at local midnight", () => {
+    const midday = new Date("2026-08-29T10:00:00Z"); // 12:00 in Rome
+    expect(formatInstant(startOfDay(midday, ROME), ROME)).toBe("2026-08-29T00:00:00+02:00");
+  });
+
+  it("closes the day at the last local second", () => {
+    const midday = new Date("2026-08-29T10:00:00Z");
+    expect(formatInstant(endOfDay(midday, ROME), ROME)).toBe("2026-08-29T23:59:59+02:00");
+  });
+
+  it("uses the local day, not the UTC one", () => {
+    // 23:30 UTC is already the next day in Rome, and the boundary follows Rome.
+    const lateEvening = new Date("2026-08-29T23:30:00Z");
+    expect(formatInstant(startOfDay(lateEvening, ROME), ROME)).toBe("2026-08-30T00:00:00+02:00");
+  });
+
+  it("opens the week on Monday", () => {
+    const sunday = new Date("2026-08-30T10:00:00Z");
+    const monday = new Date("2026-08-31T10:00:00Z");
+
+    // Italy starts the week on Monday, so Sunday belongs to the week before.
+    expect(formatInstant(startOfWeek(sunday, ROME), ROME)).toBe("2026-08-24T00:00:00+02:00");
+    expect(formatInstant(startOfWeek(monday, ROME), ROME)).toBe("2026-08-31T00:00:00+02:00");
+  });
+
+  it("opens the week correctly when it spans a month boundary", () => {
+    const wednesday = new Date("2026-09-02T10:00:00Z");
+    expect(formatInstant(startOfWeek(wednesday, ROME), ROME)).toBe("2026-08-31T00:00:00+02:00");
+  });
+
+  it("opens the month on the first", () => {
+    const midMonth = new Date("2026-08-29T10:00:00Z");
+    expect(formatInstant(startOfMonth(midMonth, ROME), ROME)).toBe("2026-08-01T00:00:00+02:00");
+  });
+
+  it("picks the offset in force on the day itself, not today's", () => {
+    // Rome is on CET in January and CEST in August: a boundary computed with a
+    // single fixed offset would be an hour out for half the year.
+    const winter = new Date("2026-01-15T12:00:00Z");
+    expect(formatInstant(startOfDay(winter, ROME), ROME)).toBe("2026-01-15T00:00:00+01:00");
+    expect(formatInstant(endOfDay(winter, ROME), ROME)).toBe("2026-01-15T23:59:59+01:00");
+  });
+
+  it("handles the day that loses an hour", () => {
+    // Rome enters CEST on 2026-03-29: that day is 23 hours long and starts at
+    // 00:00 CET, an hour earlier in UTC terms than a normal summer day.
+    const springForward = new Date("2026-03-29T12:00:00Z");
+    const start = startOfDay(springForward, ROME);
+
+    expect(formatInstant(start, ROME)).toBe("2026-03-29T00:00:00+01:00");
+    expect(start.toISOString()).toBe("2026-03-28T23:00:00.000Z");
+    expect(formatInstant(endOfDay(springForward, ROME), ROME)).toBe("2026-03-29T23:59:59+02:00");
+  });
+
+  it("handles the day that repeats an hour", () => {
+    // Rome leaves CEST on 2026-10-25: 25 hours long, opening on CEST.
+    const fallBack = new Date("2026-10-25T12:00:00Z");
+    expect(formatInstant(startOfDay(fallBack, ROME), ROME)).toBe("2026-10-25T00:00:00+02:00");
+    expect(formatInstant(endOfDay(fallBack, ROME), ROME)).toBe("2026-10-25T23:59:59+01:00");
+  });
+});
+
+describe("parseDueAt", () => {
+  it("reads a bare date as the end of that day in the local zone", () => {
+    // "by Friday" is due at the end of Friday: a task due Friday must not be
+    // reported as overdue on Friday morning.
+    const due = parseDueAt("2026-09-04", ROME, new Date("2026-08-31T10:00:00Z"));
+    expect(formatInstant(due, ROME)).toBe("2026-09-04T23:59:59+02:00");
+  });
+
+  it("uses the offset of the due date, not of today", () => {
+    const due = parseDueAt("2026-12-04", ROME, new Date("2026-08-31T10:00:00Z"));
+    expect(formatInstant(due, ROME)).toBe("2026-12-04T23:59:59+01:00");
+  });
+
+  it("keeps an explicit instant exactly as given", () => {
+    const due = parseDueAt("2026-09-04T15:00:00+02:00", ROME, new Date("2026-08-31T10:00:00Z"));
+    expect(formatInstant(due, ROME)).toBe("2026-09-04T15:00:00+02:00");
+  });
+
+  it("rejects a date that does not exist", () => {
+    expect(() => parseDueAt("2026-02-30", ROME)).toThrow(InvalidInputError);
+    expect(() => parseDueAt("2026-13-01", ROME)).toThrow(/real calendar date/);
+  });
+
+  it("still rejects a local time with no offset", () => {
+    expect(() => parseDueAt("2026-09-04T15:00", ROME)).toThrow(InvalidInputError);
+  });
+
+  it("rejects a date outside the supported range", () => {
+    expect(() => parseDueAt("1998-09-04", ROME)).toThrow(/supported range/);
   });
 });

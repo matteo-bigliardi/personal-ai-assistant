@@ -18,8 +18,11 @@ import { createAnthropicProvider } from "../src/agent/providers/anthropic.js";
 import { createAgent } from "../src/agent/agent.js";
 import { createToolRegistry } from "../src/agent/tool-registry.js";
 import { createProjectTools } from "../src/agent/tools/projects.js";
+import { createTaskTools } from "../src/agent/tools/tasks.js";
 import { createProjectsRepository } from "../src/db/repositories/projects.js";
+import { createTasksRepository } from "../src/db/repositories/tasks.js";
 import { createProjectsService } from "../src/domain/projects/service.js";
+import { createTasksService } from "../src/domain/tasks/service.js";
 
 const messages = process.argv.slice(2);
 if (messages.length === 0) {
@@ -35,7 +38,11 @@ await database.ping();
 await runMigrations(database.db);
 
 const projectsService = createProjectsService(createProjectsRepository(database.db));
-const tools = createToolRegistry(createProjectTools(projectsService, config.TZ), logger);
+const tasksService = createTasksService(createTasksRepository(database.db), projectsService);
+const tools = createToolRegistry(
+  [...createProjectTools(projectsService, config.TZ), ...createTaskTools(tasksService, config.TZ)],
+  logger,
+);
 const agent = createAgent({
   provider: createAnthropicProvider({
     apiKey: config.ANTHROPIC_API_KEY,

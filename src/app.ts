@@ -8,8 +8,11 @@ import { createAnthropicProvider } from "./agent/providers/anthropic.js";
 import { createAgent } from "./agent/agent.js";
 import { createToolRegistry } from "./agent/tool-registry.js";
 import { createProjectTools } from "./agent/tools/projects.js";
+import { createTaskTools } from "./agent/tools/tasks.js";
 import { createProjectsRepository } from "./db/repositories/projects.js";
+import { createTasksRepository } from "./db/repositories/tasks.js";
 import { createProjectsService } from "./domain/projects/service.js";
+import { createTasksService } from "./domain/tasks/service.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 
 async function main(): Promise<void> {
@@ -32,7 +35,14 @@ async function main(): Promise<void> {
   // layer only knows the one below it, so the domain stays free of Telegram
   // and of the model.
   const projectsService = createProjectsService(createProjectsRepository(database.db));
-  const tools = createToolRegistry([...createProjectTools(projectsService, config.TZ)], logger);
+  const tasksService = createTasksService(createTasksRepository(database.db), projectsService);
+  const tools = createToolRegistry(
+    [
+      ...createProjectTools(projectsService, config.TZ),
+      ...createTaskTools(tasksService, config.TZ),
+    ],
+    logger,
+  );
 
   const agent = createAgent({
     provider,

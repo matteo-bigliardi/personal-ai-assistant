@@ -7,8 +7,8 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Projects are implemented end to end — the agent loop, the typed
-tool boundary and the project tools all work over Telegram. Tasks, time
+**In progress.** Projects and tasks are implemented end to end — the agent loop,
+the typed tool boundary and both sets of tools work over Telegram. Time
 tracking, reminders and Calendar are next.
 
 ## Stack
@@ -137,6 +137,19 @@ Project status carries behaviour rather than being a label: `active` is what
 the briefing will consider, `paused` is a deliberate hold that stays listed with
 its tasks intact, and `archived` is the soft delete — there is no
 `delete_project`. Listings hide archived projects by default and nothing else.
+Tasks work the same way: `cancelled` is their soft delete, and a listing shows
+open tasks unless a status is asked for.
+
+Projects are addressed by name, because that is how chat refers to them and
+because the name is unique. Task titles are not unique, so tasks are addressed
+by the first eight characters of their id, shown in every listing and resolved
+back to exactly one row — an ambiguous reference is refused rather than guessed.
+
+A deadline given as a plain calendar date means the end of that day in the
+configured timezone, so a task due Friday is not reported as overdue on Friday
+morning. The model never computes that instant: it reports the date it read off
+the per-turn calendar block, and the conversion, including which daylight-saving
+offset applies to that particular day, happens in `domain/datetime.ts`.
 
 Domain timestamps come from the application clock, not from column defaults: a
 default `now()` is the transaction start time on the database host, which is a
