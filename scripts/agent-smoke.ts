@@ -19,10 +19,13 @@ import { createAgent } from "../src/agent/agent.js";
 import { createToolRegistry } from "../src/agent/tool-registry.js";
 import { createProjectTools } from "../src/agent/tools/projects.js";
 import { createTaskTools } from "../src/agent/tools/tasks.js";
+import { createTimeTools } from "../src/agent/tools/time.js";
 import { createProjectsRepository } from "../src/db/repositories/projects.js";
 import { createTasksRepository } from "../src/db/repositories/tasks.js";
+import { createWorkSessionsRepository } from "../src/db/repositories/work-sessions.js";
 import { createProjectsService } from "../src/domain/projects/service.js";
 import { createTasksService } from "../src/domain/tasks/service.js";
+import { createTimeService } from "../src/domain/time/service.js";
 
 const messages = process.argv.slice(2);
 if (messages.length === 0) {
@@ -39,8 +42,17 @@ await runMigrations(database.db);
 
 const projectsService = createProjectsService(createProjectsRepository(database.db));
 const tasksService = createTasksService(createTasksRepository(database.db), projectsService);
+const timeService = createTimeService(
+  createWorkSessionsRepository(database.db),
+  projectsService,
+  config.TZ,
+);
 const tools = createToolRegistry(
-  [...createProjectTools(projectsService, config.TZ), ...createTaskTools(tasksService, config.TZ)],
+  [
+    ...createProjectTools(projectsService, config.TZ),
+    ...createTaskTools(tasksService, config.TZ),
+    ...createTimeTools(timeService, config.TZ),
+  ],
   logger,
 );
 const agent = createAgent({

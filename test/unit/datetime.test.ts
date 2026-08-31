@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  dayRange,
   endOfDay,
+  formatDuration,
   formatHuman,
   formatInstant,
   formatNowBlock,
@@ -8,7 +10,9 @@ import {
   parseDueAt,
   parseInstant,
   startOfDay,
+  startOfDayAfter,
   startOfMonth,
+  startOfNextMonth,
   startOfWeek,
 } from "../../src/domain/datetime.js";
 import { InvalidInputError } from "../../src/domain/errors.js";
@@ -214,5 +218,67 @@ describe("parseDueAt", () => {
 
   it("rejects a date outside the supported range", () => {
     expect(() => parseDueAt("1998-09-04", ROME)).toThrow(/supported range/);
+  });
+});
+
+/**
+ * Upper bounds are exclusive everywhere time is summed. `endOfDay` is
+ * 23:59:59, so using it to close a period would drop the last second of every
+ * day; these helpers give the first instant *outside* the period instead.
+ */
+describe("exclusive period bounds", () => {
+  it("opens the following day", () => {
+    const midday = new Date("2026-08-31T10:00:00Z");
+    expect(formatInstant(startOfDayAfter(midday, ROME), ROME)).toBe("2026-09-01T00:00:00+02:00");
+  });
+
+  it("counts several days forward across a month boundary", () => {
+    const monday = new Date("2026-08-31T10:00:00Z");
+    expect(formatInstant(startOfDayAfter(monday, ROME, 7), ROME)).toBe("2026-09-07T00:00:00+02:00");
+  });
+
+  it("crosses the end of daylight saving without drifting an hour", () => {
+    // 2026-10-25 is 25 hours long; adding a fixed 24h would land at 23:00.
+    const beforeTransition = new Date("2026-10-25T10:00:00Z");
+    expect(formatInstant(startOfDayAfter(beforeTransition, ROME), ROME)).toBe(
+      "2026-10-26T00:00:00+01:00",
+    );
+  });
+
+  it("opens the following month, rolling into the next year in December", () => {
+    expect(formatInstant(startOfNextMonth(new Date("2026-08-31T10:00:00Z"), ROME), ROME)).toBe(
+      "2026-09-01T00:00:00+02:00",
+    );
+    expect(formatInstant(startOfNextMonth(new Date("2026-12-15T10:00:00Z"), ROME), ROME)).toBe(
+      "2027-01-01T00:00:00+01:00",
+    );
+  });
+});
+
+describe("dayRange", () => {
+  it("covers one whole day, closing at the start of the next", () => {
+    const { from, to } = dayRange("2026-08-31", ROME);
+
+    expect(formatInstant(from, ROME)).toBe("2026-08-31T00:00:00+02:00");
+    expect(formatInstant(to, ROME)).toBe("2026-09-01T00:00:00+02:00");
+  });
+
+  it("rejects anything that is not a bare calendar date", () => {
+    expect(() => dayRange("2026-08-31T10:00:00+02:00", ROME)).toThrow(InvalidInputError);
+    expect(() => dayRange("2026-02-30", ROME)).toThrow(/real calendar date/);
+  });
+});
+
+describe("formatDuration", () => {
+  it("reads the way a person would say it", () => {
+    expect(formatDuration(3600 * 3 + 60 * 20)).toBe("3h 20m");
+    expect(formatDuration(3600 * 2)).toBe("2h");
+    expect(formatDuration(60 * 45)).toBe("45m");
+    expect(formatDuration(12)).toBe("12s");
+    expect(formatDuration(0)).toBe("0s");
+  });
+
+  it("never reports negative time", () => {
+    expect(formatDuration(-5)).toBe("0s");
   });
 });

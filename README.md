@@ -7,9 +7,9 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Projects and tasks are implemented end to end — the agent loop,
-the typed tool boundary and both sets of tools work over Telegram. Time
-tracking, reminders and Calendar are next.
+**In progress.** Projects, tasks and time tracking are implemented end to end —
+the agent loop, the typed tool boundary and all twelve tools work over Telegram.
+Reminders and Calendar are next.
 
 ## Stack
 
@@ -150,6 +150,15 @@ configured timezone, so a task due Friday is not reported as overdue on Friday
 morning. The model never computes that instant: it reports the date it read off
 the per-turn calendar block, and the conversion, including which daylight-saving
 offset applies to that particular day, happens in `domain/datetime.ts`.
+
+Time is tracked as work sessions, at most one of them running at a time. A
+timer may run on a paused project — if you are working on it, it is not paused
+any more — but not on a completed or archived one. Starting a second timer is
+refused, and the refusal names the project already running rather than silently
+stopping it. Reporting periods are half-open ranges `[from, to)`, resolved from
+a named period or a pair of calendar dates; a session that straddles a boundary
+is counted only for the part inside, and a running timer is counted up to now
+and reported separately so a total never looks more final than it is.
 
 Domain timestamps come from the application clock, not from column defaults: a
 default `now()` is the transaction start time on the database host, which is a

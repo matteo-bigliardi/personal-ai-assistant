@@ -293,21 +293,81 @@ export const DUE_FORMAT_HINT =
  */
 export function parseDueAt(value: unknown, timeZone: string, now: Date = new Date()): Date {
   if (typeof value === "string") {
-    const date = CALENDAR_DATE.exec(value);
-    if (date) {
-      const [, y, mo, d] = date;
-      const year = Number(y);
-      const month = Number(mo);
-      const day = Number(d);
-      if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
-        throw new InvalidInputError(`"${value}" is not a real calendar date.`);
-      }
-      // Midday anchors the lookup safely inside the day whatever the offset.
-      const midday = new Date(Date.UTC(year, month - 1, day, 12));
-      const due = endOfDay(midday, timeZone);
+    const anchor = calendarAnchor(value);
+    if (anchor) {
+      const due = endOfDay(anchor, timeZone);
       assertSupportedRange(due, value, now);
       return due;
     }
   }
   return parseInstant(value, now);
+}
+
+/**
+ * A bare `YYYY-MM-DD` as an instant safely inside that civil day, or undefined
+ * if the string is not a bare date at all. Midday keeps the anchor inside the
+ * day whatever the zone offset turns out to be, so callers can hand it to the
+ * boundary helpers without worrying about landing a day either side.
+ */
+function calendarAnchor(value: string): Date | undefined {
+  const match = CALENDAR_DATE.exec(value);
+  if (!match) return undefined;
+
+  const [, y, mo, d] = match;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
+    throw new InvalidInputError(`"${value}" is not a real calendar date.`);
+  }
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+/** Midnight opening the civil day `days` after the one `date` falls in. */
+export function startOfDayAfter(date: Date, timeZone: string, days = 1): Date {
+  const [y, m, d] = civilParts(date, timeZone);
+  const shifted = new Date(Date.UTC(y, m - 1, d) + days * DAY_MS);
+  return instantAtWallClock(
+    timeZone,
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth() + 1,
+    shifted.getUTCDate(),
+    0,
+    0,
+    0,
+  );
+}
+
+/** Midnight opening the month after the one `date` falls in. */
+export function startOfNextMonth(date: Date, timeZone: string): Date {
+  const [y, m] = civilParts(date, timeZone);
+  // Month 13 rolls into January of the next year, which Date.UTC handles.
+  return instantAtWallClock(timeZone, m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1, 0, 0, 0);
+}
+
+/**
+ * The half-open range `[from, to)` covering one calendar day given as
+ * `YYYY-MM-DD`.
+ *
+ * Half-open is the point: `endOfDay` is 23:59:59, so using it as an upper
+ * bound would silently drop the last second of every period. Ranges are built
+ * by taking the start of the day after instead.
+ */
+export function dayRange(value: string, timeZone: string): { from: Date; to: Date } {
+  const anchor = calendarAnchor(value);
+  if (!anchor) {
+    throw new InvalidInputError(`"${value}" is not a calendar date of the form YYYY-MM-DD.`);
+  }
+  return { from: startOfDay(anchor, timeZone), to: startOfDayAfter(anchor, timeZone) };
+}
+
+/** `3h 20m`, `45m`, `12s` — a duration as a person would say it. */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${total}s`;
 }

@@ -9,10 +9,13 @@ import { createAgent } from "./agent/agent.js";
 import { createToolRegistry } from "./agent/tool-registry.js";
 import { createProjectTools } from "./agent/tools/projects.js";
 import { createTaskTools } from "./agent/tools/tasks.js";
+import { createTimeTools } from "./agent/tools/time.js";
 import { createProjectsRepository } from "./db/repositories/projects.js";
 import { createTasksRepository } from "./db/repositories/tasks.js";
+import { createWorkSessionsRepository } from "./db/repositories/work-sessions.js";
 import { createProjectsService } from "./domain/projects/service.js";
 import { createTasksService } from "./domain/tasks/service.js";
+import { createTimeService } from "./domain/time/service.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 
 async function main(): Promise<void> {
@@ -36,10 +39,16 @@ async function main(): Promise<void> {
   // and of the model.
   const projectsService = createProjectsService(createProjectsRepository(database.db));
   const tasksService = createTasksService(createTasksRepository(database.db), projectsService);
+  const timeService = createTimeService(
+    createWorkSessionsRepository(database.db),
+    projectsService,
+    config.TZ,
+  );
   const tools = createToolRegistry(
     [
       ...createProjectTools(projectsService, config.TZ),
       ...createTaskTools(tasksService, config.TZ),
+      ...createTimeTools(timeService, config.TZ),
     ],
     logger,
   );
