@@ -19,9 +19,10 @@ export interface TestDb extends DbHandle {
   truncate(): Promise<void>;
 }
 
-const TABLES = ["work_sessions", "tasks", "projects"];
+const TABLES = ["reminders", "work_sessions", "tasks", "projects"];
 
-function testDatabaseUrl(): string | undefined {
+/** Exported so job tests can hand the same URL to pg-boss. */
+export function testDatabaseUrl(): string | undefined {
   const raw = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!raw) return undefined;
   if (process.env.TEST_DATABASE_URL) return raw;

@@ -17,6 +17,16 @@ import type { ToolCall, ToolResult, ToolSpec } from "./providers/types.js";
 /** Results larger than this are truncated to keep the context bounded. */
 const MAX_RESULT_CHARS = 8_000;
 
+/**
+ * Per-turn facts a tool may need that are not arguments the model chooses.
+ * The chat a message came from is the assistant's own knowledge, not something
+ * the model should be able to name — a reminder must be delivered where it was
+ * asked for, whatever the model puts in its arguments.
+ */
+export interface ToolContext {
+  chatId: string;
+}
+
 export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
   name: string;
   /** Shown to the model. Say when to use the tool, not how it is implemented. */
@@ -28,7 +38,7 @@ export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
    * hardening work.
    */
   destructive?: boolean;
-  execute(input: z.output<S>): Promise<unknown>;
+  execute(input: z.output<S>, context: ToolContext): Promise<unknown>;
 }
 
 /** Preserves the schema's inferred type through to `execute`. */
@@ -39,7 +49,7 @@ export function defineTool<S extends z.ZodType>(def: ToolDefinition<S>): ToolDef
 export interface ToolRegistry {
   specs: ToolSpec[];
   has(name: string): boolean;
-  execute(call: ToolCall): Promise<ToolResult>;
+  execute(call: ToolCall, context: ToolContext): Promise<ToolResult>;
 }
 
 function toInputSchema(schema: z.ZodType): Record<string, unknown> {
@@ -79,7 +89,7 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
     specs,
     has: (name) => byName.has(name),
 
-    async execute(call: ToolCall): Promise<ToolResult> {
+    async execute(call: ToolCall, context: ToolContext): Promise<ToolResult> {
       const def = byName.get(call.name);
       if (!def) {
         logger.warn("tool.unknown", { tool: call.name });
@@ -97,7 +107,7 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
 
       const start = Date.now();
       try {
-        const output = await def.execute(parsed.data);
+        const output = await def.execute(parsed.data, context);
         logger.info("tool.call", { tool: call.name, ok: true, latencyMs: Date.now() - start });
         return { id: call.id, content: serialise(output) };
       } catch (err) {

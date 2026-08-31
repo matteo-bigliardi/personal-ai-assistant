@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -27,6 +28,23 @@ export const projectStatus = pgEnum("project_status", [
 export const taskStatus = pgEnum("task_status", ["open", "done", "cancelled"]);
 
 export const taskPriority = pgEnum("task_priority", ["low", "medium", "high"]);
+
+/**
+ * Reminder lifecycle:
+ *   pending   — scheduled, never delivered
+ *   delivered — sent to the chat at least once
+ *   snoozed   — delivered, then postponed; scheduled again
+ *   cancelled — called off by the user
+ *
+ * `snoozed` is deliberately distinct from `pending`: a postponed reminder has
+ * already interrupted the user once, and collapsing the two would lose that.
+ */
+export const reminderStatus = pgEnum("reminder_status", [
+  "pending",
+  "delivered",
+  "snoozed",
+  "cancelled",
+]);
 
 export const projects = pgTable(
   "projects",
@@ -97,9 +115,47 @@ export const workSessions = pgTable(
   ],
 );
 
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Who to deliver to is a fact about the reminder, not about the current
+    // environment: a reminder queued today stays deliverable even if the
+    // configured allowlist changes tomorrow.
+    chatId: text("chat_id").notNull(),
+    message: text("message").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    status: reminderStatus("status").notNull().default("pending"),
+    /** The pg-boss job currently scheduled for this reminder, if any. */
+    jobId: text("job_id"),
+    snoozeCount: integer("snooze_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Drives the catch-up sweep at startup and every "what is still due" read.
+    index("reminders_due_idx").on(t.status, t.dueAt),
+    // A reminder that has never been delivered cannot carry a delivery time,
+    // and one that has been delivered must. Cancelled is left free: it can be
+    // reached either before or after a delivery.
+    check(
+      "reminders_pending_not_delivered",
+      sql`${t.status} <> 'pending' OR ${t.deliveredAt} IS NULL`,
+    ),
+    check(
+      "reminders_delivered_has_timestamp",
+      sql`${t.status} NOT IN ('delivered', 'snoozed') OR ${t.deliveredAt} IS NOT NULL`,
+    ),
+    check("reminders_snooze_count_non_negative", sql`${t.snoozeCount} >= 0`),
+  ],
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type WorkSession = typeof workSessions.$inferSelect;
 export type NewWorkSession = typeof workSessions.$inferInsert;
+export type Reminder = typeof reminders.$inferSelect;
+export type NewReminder = typeof reminders.$inferInsert;

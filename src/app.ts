@@ -10,13 +10,18 @@ import { createToolRegistry } from "./agent/tool-registry.js";
 import { createProjectTools } from "./agent/tools/projects.js";
 import { createTaskTools } from "./agent/tools/tasks.js";
 import { createTimeTools } from "./agent/tools/time.js";
+import { createReminderTools } from "./agent/tools/reminders.js";
 import { createProjectsRepository } from "./db/repositories/projects.js";
 import { createTasksRepository } from "./db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "./db/repositories/work-sessions.js";
+import { createRemindersRepository } from "./db/repositories/reminders.js";
 import { createProjectsService } from "./domain/projects/service.js";
 import { createTasksService } from "./domain/tasks/service.js";
 import { createTimeService } from "./domain/time/service.js";
+import { createRemindersService } from "./domain/reminders/service.js";
+import { createReminderJobs, type ReminderDelivery } from "./jobs/reminders.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
+import { createTelegramReminderDelivery } from "./channels/telegram/reminder-delivery.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -44,11 +49,34 @@ async function main(): Promise<void> {
     projectsService,
     config.TZ,
   );
+  // Reminders close a cycle the other domains do not have: the queue delivers
+  // through Telegram, Telegram answers through the agent, the agent calls the
+  // reminder tools, and those schedule on the queue. It is broken here, at the
+  // composition root, by giving the queue a delivery that resolves the bot when
+  // a reminder actually fires — by which time everything below exists.
+  const remindersRepository = createRemindersRepository(database.db);
+  let telegramDelivery: ReminderDelivery | undefined = undefined;
+  const delivery: ReminderDelivery = {
+    async deliver(input) {
+      if (!telegramDelivery) throw new Error("Telegram delivery is not ready yet");
+      await telegramDelivery.deliver(input);
+    },
+  };
+
+  const jobs = createReminderJobs({
+    connectionString: config.DATABASE_URL,
+    repo: remindersRepository,
+    delivery,
+    logger,
+  });
+  const remindersService = createRemindersService(remindersRepository, jobs.scheduler);
+
   const tools = createToolRegistry(
     [
       ...createProjectTools(projectsService, config.TZ),
       ...createTaskTools(tasksService, config.TZ),
       ...createTimeTools(timeService, config.TZ),
+      ...createReminderTools(remindersService, config.TZ),
     ],
     logger,
   );
@@ -66,7 +94,16 @@ async function main(): Promise<void> {
     allowedUserIds: config.TELEGRAM_ALLOWED_USER_IDS,
     agent,
     logger,
+    onSnooze: async (reminderId, minutes) => {
+      await remindersService.snooze(reminderId, minutes);
+    },
   });
+  telegramDelivery = createTelegramReminderDelivery(bot);
+
+  // Start the queue before reconciling it: anything that fell due while the
+  // process was down goes out now, late rather than never.
+  await jobs.start();
+  await jobs.recover();
 
   // Minimal HTTP surface: health check only (Telegram uses long polling in V1).
   const http = new Hono();
@@ -92,6 +129,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info("shutdown", { signal });
     await bot.stop();
+    await jobs.stop();
     server.close();
     await database.close();
     process.exit(0);

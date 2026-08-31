@@ -17,6 +17,8 @@ function parse(content: string): Record<string, unknown> {
   return JSON.parse(content) as Record<string, unknown>;
 }
 
+const CONTEXT = { chatId: "chat-1" };
+
 describe("createToolRegistry", () => {
   it("advertises each tool as a JSON Schema object", () => {
     const registry = createToolRegistry([echo], createTestLogger());
@@ -39,7 +41,10 @@ describe("createToolRegistry", () => {
     const logger = createTestLogger();
     const registry = createToolRegistry([echo], logger);
 
-    const result = await registry.execute({ id: "t1", name: "echo", input: { message: "hi" } });
+    const result = await registry.execute(
+      { id: "t1", name: "echo", input: { message: "hi" } },
+      CONTEXT,
+    );
 
     expect(result.isError).toBeUndefined();
     expect(parse(result.content)).toEqual({ message: "hi", times: 1 });
@@ -49,7 +54,10 @@ describe("createToolRegistry", () => {
   it("turns invalid arguments into a readable error instead of throwing", async () => {
     const registry = createToolRegistry([echo], createTestLogger());
 
-    const result = await registry.execute({ id: "t1", name: "echo", input: { message: 42 } });
+    const result = await registry.execute(
+      { id: "t1", name: "echo", input: { message: 42 } },
+      CONTEXT,
+    );
 
     expect(result.isError).toBe(true);
     expect(parse(result.content)).toMatchObject({ error: { code: "invalid_input" } });
@@ -59,7 +67,7 @@ describe("createToolRegistry", () => {
   it("reports an unknown tool without failing the turn", async () => {
     const registry = createToolRegistry([echo], createTestLogger());
 
-    const result = await registry.execute({ id: "t1", name: "nope", input: {} });
+    const result = await registry.execute({ id: "t1", name: "nope", input: {} }, CONTEXT);
 
     expect(result.isError).toBe(true);
     expect(parse(result.content)).toMatchObject({ error: { code: "unknown_tool" } });
@@ -76,7 +84,7 @@ describe("createToolRegistry", () => {
     });
     const registry = createToolRegistry([failing], createTestLogger());
 
-    const result = await registry.execute({ id: "t1", name: "boom", input: {} });
+    const result = await registry.execute({ id: "t1", name: "boom", input: {} }, CONTEXT);
 
     expect(result.isError).toBe(true);
     expect(parse(result.content)).toEqual({
@@ -96,7 +104,7 @@ describe("createToolRegistry", () => {
     const logger = createTestLogger();
     const registry = createToolRegistry([failing], logger);
 
-    const result = await registry.execute({ id: "t1", name: "boom", input: {} });
+    const result = await registry.execute({ id: "t1", name: "boom", input: {} }, CONTEXT);
 
     expect(parse(result.content)).toMatchObject({ error: { code: "internal_error" } });
     expect(result.content).not.toContain("hunter2");
@@ -114,7 +122,7 @@ describe("createToolRegistry", () => {
     });
     const registry = createToolRegistry([huge], createTestLogger());
 
-    const result = await registry.execute({ id: "t1", name: "huge", input: {} });
+    const result = await registry.execute({ id: "t1", name: "huge", input: {} }, CONTEXT);
 
     expect(result.content.length).toBeLessThan(8_100);
     expect(result.content).toContain("truncated");

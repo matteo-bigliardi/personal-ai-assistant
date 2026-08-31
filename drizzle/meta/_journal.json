@@ -15,6 +15,13 @@
       "when": 1788203609809,
       "tag": "0001_lucky_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788208576101,
+      "tag": "0002_smiling_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

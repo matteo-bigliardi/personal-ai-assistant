@@ -120,7 +120,9 @@ export function createAgent(opts: AgentOptions): Agent {
 
         // Independent calls in one response are executed together; each one
         // validates its own arguments and reports its own failure.
-        const results = await Promise.all(result.toolCalls.map((call) => tools.execute(call)));
+        const results = await Promise.all(
+          result.toolCalls.map((call) => tools.execute(call, { chatId })),
+        );
         messages.push({ role: "tool", results });
       }
 

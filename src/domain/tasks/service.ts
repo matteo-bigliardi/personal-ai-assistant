@@ -8,6 +8,7 @@ import type {
 } from "../../db/repositories/tasks.js";
 import type { ProjectsService } from "../projects/service.js";
 import { InvalidInputError, NotFoundError } from "../errors.js";
+import { normaliseRef, resolveOne } from "../reference.js";
 
 /**
  * Task rules, independent of Telegram, of the model and of SQL.
@@ -23,12 +24,6 @@ export const MAX_DESCRIPTION_LENGTH = 500;
 
 export const TASK_STATUSES = taskStatus.enumValues;
 export const TASK_PRIORITIES = taskPriority.enumValues;
-
-/** How much of the id is shown to the model and accepted back from it. */
-export const TASK_REF_LENGTH = 8;
-
-/** Shorter references are too likely to be ambiguous to be worth resolving. */
-const MIN_REF_LENGTH = 4;
 
 /**
  * `cancelled` is the soft delete, matching `archived` for projects: there is no
@@ -97,37 +92,11 @@ function normaliseDescription(raw: string | undefined): string | undefined {
   return description;
 }
 
-/** The reference as it is shown back to the model. */
-export function taskRef(task: { id: string }): string {
-  return task.id.slice(0, TASK_REF_LENGTH);
-}
-
-function normaliseRef(raw: string): string {
-  const ref = raw.trim().toLowerCase();
-  // Anything outside the UUID alphabet cannot match a row, and letting it reach
-  // the LIKE pattern would hand the query wildcards it never agreed to.
-  if (!/^[0-9a-f-]+$/.test(ref) || ref.length < MIN_REF_LENGTH || ref.length > 36) {
-    throw new InvalidInputError(
-      `"${raw}" is not a task id. Use the ${TASK_REF_LENGTH}-character id shown next to the task.`,
-    );
-  }
-  return ref;
-}
-
 export function createTasksService(repo: TasksRepository, projects: ProjectsService): TasksService {
   async function getByRef(rawRef: string): Promise<TaskWithProject> {
-    const ref = normaliseRef(rawRef);
+    const ref = normaliseRef(rawRef, "task");
     // Two is enough to tell "exactly one" from "more than one".
-    const matches = await repo.findByIdPrefix(ref, 2);
-
-    const [task] = matches;
-    if (!task) throw new NotFoundError(`No task with id "${ref}".`);
-    if (matches.length > 1) {
-      throw new InvalidInputError(
-        `The id "${ref}" matches more than one task. List the tasks again and use a longer id.`,
-      );
-    }
-    return task;
+    return resolveOne(await repo.findByIdPrefix(ref, 2), ref, "task");
   }
 
   /**

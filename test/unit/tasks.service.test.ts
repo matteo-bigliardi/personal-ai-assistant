@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createTasksService, taskRef } from "../../src/domain/tasks/service.js";
+import { createTasksService } from "../../src/domain/tasks/service.js";
+import { shortRef } from "../../src/domain/reference.js";
 import type {
   CreateTaskInput,
   TasksRepository,
@@ -159,7 +160,7 @@ describe("tasks service", () => {
   describe("getByRef", () => {
     it("resolves a short id prefix", async () => {
       const repo = fakeRepo([{ title: "prepare demo" }]);
-      const ref = taskRef(repo.rows[0]!);
+      const ref = shortRef(repo.rows[0]!);
 
       expect(ref).toHaveLength(8);
       expect((await service(repo).getByRef(ref)).title).toBe("prepare demo");
@@ -172,7 +173,7 @@ describe("tasks service", () => {
 
     it("ignores casing and surrounding space", async () => {
       const repo = fakeRepo([{ title: "prepare demo" }]);
-      const ref = taskRef(repo.rows[0]!).toUpperCase();
+      const ref = shortRef(repo.rows[0]!).toUpperCase();
       expect((await service(repo).getByRef(`  ${ref} `)).title).toBe("prepare demo");
     });
 
@@ -203,7 +204,7 @@ describe("tasks service", () => {
   describe("complete", () => {
     it("marks a task done and stamps the completion time", async () => {
       const repo = fakeRepo([{ title: "prepare demo" }]);
-      const { task, alreadyDone } = await service(repo).complete(taskRef(repo.rows[0]!));
+      const { task, alreadyDone } = await service(repo).complete(shortRef(repo.rows[0]!));
 
       expect(task.status).toBe("done");
       expect(task.completedAt).toBeInstanceOf(Date);
@@ -214,7 +215,7 @@ describe("tasks service", () => {
       const completedAt = new Date("2026-08-10T09:00:00Z");
       const repo = fakeRepo([{ status: "done", completedAt }]);
 
-      const { task, alreadyDone } = await service(repo).complete(taskRef(repo.rows[0]!));
+      const { task, alreadyDone } = await service(repo).complete(shortRef(repo.rows[0]!));
 
       expect(alreadyDone).toBe(true);
       expect(task.completedAt).toEqual(completedAt);
@@ -227,7 +228,7 @@ describe("tasks service", () => {
       // this is a correctness requirement, not a tidiness preference.
       const repo = fakeRepo([{ status: "done", completedAt: new Date() }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { status: "open" });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { status: "open" });
 
       expect(updated.status).toBe("open");
       expect(updated.completedAt).toBeNull();
@@ -236,7 +237,7 @@ describe("tasks service", () => {
     it("clears completed_at when a done task is cancelled", async () => {
       const repo = fakeRepo([{ status: "done", completedAt: new Date() }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { status: "cancelled" });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { status: "cancelled" });
 
       expect(updated.status).toBe("cancelled");
       expect(updated.completedAt).toBeNull();
@@ -245,7 +246,7 @@ describe("tasks service", () => {
     it("stamps completed_at when a task is set to done", async () => {
       const repo = fakeRepo([{ status: "open" }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { status: "done" });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { status: "done" });
 
       expect(updated.completedAt).toBeInstanceOf(Date);
     });
@@ -254,7 +255,7 @@ describe("tasks service", () => {
       const completedAt = new Date("2026-08-10T09:00:00Z");
       const repo = fakeRepo([{ status: "done", completedAt }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { status: "done" });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { status: "done" });
 
       expect(updated.completedAt).toEqual(completedAt);
     });
@@ -263,7 +264,7 @@ describe("tasks service", () => {
       const repo = fakeRepo([{ title: "prepare demo" }]);
       const projects = fakeProjects(["Atlas", "Borealis"]);
 
-      const updated = await service(repo, projects).update(taskRef(repo.rows[0]!), {
+      const updated = await service(repo, projects).update(shortRef(repo.rows[0]!), {
         projectName: "borealis",
       });
 
@@ -274,7 +275,7 @@ describe("tasks service", () => {
     it("detaches a task from its project on an empty project name", async () => {
       const repo = fakeRepo([{ projectId: "project-0", projectName: "Atlas" }]);
 
-      const updated = await service(repo, fakeProjects(["Atlas"])).update(taskRef(repo.rows[0]!), {
+      const updated = await service(repo, fakeProjects(["Atlas"])).update(shortRef(repo.rows[0]!), {
         projectName: "  ",
       });
 
@@ -285,7 +286,7 @@ describe("tasks service", () => {
     it("clears the due date when it is set to null", async () => {
       const repo = fakeRepo([{ dueAt: new Date("2026-09-04T21:59:59Z") }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { dueAt: null });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { dueAt: null });
 
       expect(updated.dueAt).toBeNull();
     });
@@ -293,14 +294,14 @@ describe("tasks service", () => {
     it("clears the description on an empty string", async () => {
       const repo = fakeRepo([{ description: "old" }]);
 
-      const updated = await service(repo).update(taskRef(repo.rows[0]!), { description: "  " });
+      const updated = await service(repo).update(shortRef(repo.rows[0]!), { description: "  " });
 
       expect(updated.description).toBeNull();
     });
 
     it("refuses an update that changes nothing", async () => {
       const repo = fakeRepo([{ title: "prepare demo" }]);
-      await expect(service(repo).update(taskRef(repo.rows[0]!), {})).rejects.toThrow(
+      await expect(service(repo).update(shortRef(repo.rows[0]!), {})).rejects.toThrow(
         /Nothing to update/,
       );
     });

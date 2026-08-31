@@ -20,12 +20,16 @@ import { createToolRegistry } from "../src/agent/tool-registry.js";
 import { createProjectTools } from "../src/agent/tools/projects.js";
 import { createTaskTools } from "../src/agent/tools/tasks.js";
 import { createTimeTools } from "../src/agent/tools/time.js";
+import { createReminderTools } from "../src/agent/tools/reminders.js";
 import { createProjectsRepository } from "../src/db/repositories/projects.js";
 import { createTasksRepository } from "../src/db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "../src/db/repositories/work-sessions.js";
+import { createRemindersRepository } from "../src/db/repositories/reminders.js";
 import { createProjectsService } from "../src/domain/projects/service.js";
 import { createTasksService } from "../src/domain/tasks/service.js";
 import { createTimeService } from "../src/domain/time/service.js";
+import { createRemindersService } from "../src/domain/reminders/service.js";
+import { createReminderJobs } from "../src/jobs/reminders.js";
 
 const messages = process.argv.slice(2);
 if (messages.length === 0) {
@@ -47,11 +51,30 @@ const timeService = createTimeService(
   projectsService,
   config.TZ,
 );
+// Reminders are scheduled for real, but delivered to the console instead of
+// Telegram: this script exists to exercise the tools, not to message anyone.
+const jobs = createReminderJobs({
+  connectionString: config.DATABASE_URL,
+  repo: createRemindersRepository(database.db),
+  logger,
+  delivery: {
+    async deliver({ message }) {
+      console.log(`
+[reminder fired] ${message}`);
+    },
+  },
+});
+const remindersService = createRemindersService(
+  createRemindersRepository(database.db),
+  jobs.scheduler,
+);
+
 const tools = createToolRegistry(
   [
     ...createProjectTools(projectsService, config.TZ),
     ...createTaskTools(tasksService, config.TZ),
     ...createTimeTools(timeService, config.TZ),
+    ...createReminderTools(remindersService, config.TZ),
   ],
   logger,
 );
@@ -65,11 +88,14 @@ const agent = createAgent({
   timeZone: config.TZ,
 });
 
+await jobs.start();
+
 try {
   for (const text of messages) {
     console.log(`\n> ${text}`);
     console.log(`< ${await agent.handleMessage({ chatId: "smoke", text })}`);
   }
 } finally {
+  await jobs.stop();
   await database.close();
 }

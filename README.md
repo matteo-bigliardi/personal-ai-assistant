@@ -7,9 +7,9 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Projects, tasks and time tracking are implemented end to end —
-the agent loop, the typed tool boundary and all twelve tools work over Telegram.
-Reminders and Calendar are next.
+**In progress.** Projects, tasks, time tracking and persistent reminders are
+implemented end to end — the agent loop, the typed tool boundary and all sixteen
+tools work over Telegram. Google Calendar is next.
 
 ## Stack
 
@@ -150,6 +150,17 @@ configured timezone, so a task due Friday is not reported as overdue on Friday
 morning. The model never computes that instant: it reports the date it read off
 the per-turn calendar block, and the conversion, including which daylight-saving
 offset applies to that particular day, happens in `domain/datetime.ts`.
+
+Reminders are delivered by a background worker, never by the model: the text is
+written when the reminder is created, so it arrives on time even if the LLM is
+unreachable. The queue (pg-boss, in its own database schema) is a mechanism, not
+the record — the reminders table is authoritative, which is what makes recovery
+possible. On startup anything that fell due while the process was down is
+delivered late rather than dropped, and a reminder whose job was never created,
+because the process died between the insert and the enqueue, is scheduled again.
+Delivery is idempotent: the worker claims a reminder with a conditional status
+update before sending, so a pg-boss retry, or two workers racing, cannot deliver
+the same message twice.
 
 Time is tracked as work sessions, at most one of them running at a time. A
 timer may run on a paused project — if you are working on it, it is not paused

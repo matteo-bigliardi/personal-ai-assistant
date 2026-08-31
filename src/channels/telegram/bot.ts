@@ -1,6 +1,7 @@
 import { Bot } from "grammy";
 import type { Agent } from "../../agent/agent.js";
 import type { Logger } from "../../observability/logger.js";
+import { parseReminderCallback } from "./reminder-delivery.js";
 
 export interface TelegramBotOptions {
   token: string;
@@ -8,6 +9,12 @@ export interface TelegramBotOptions {
   allowedUserIds: number[];
   agent: Agent;
   logger: Logger;
+  /**
+   * Handles the buttons attached to a delivered reminder. Kept as a narrow
+   * callback rather than the whole service, so the transport still knows
+   * nothing about the domain.
+   */
+  onSnooze?: (reminderId: string, minutes: number) => Promise<void>;
 }
 
 /**
@@ -15,7 +22,7 @@ export interface TelegramBotOptions {
  * transport, the allowlist and delegating to the agent. No domain logic here.
  */
 export function createTelegramBot(opts: TelegramBotOptions): Bot {
-  const { token, allowedUserIds, agent, logger } = opts;
+  const { token, allowedUserIds, agent, logger, onSnooze } = opts;
   const bot = new Bot(token);
   const allowed = new Set(allowedUserIds);
 
@@ -54,6 +61,37 @@ export function createTelegramBot(opts: TelegramBotOptions): Bot {
         error: err instanceof Error ? err.message : String(err),
       });
       await ctx.reply("Something went wrong handling that message.");
+    }
+  });
+
+  // Buttons on a delivered reminder. The allowlist middleware above has
+  // already run, so an unauthorised press never reaches here.
+  bot.on("callback_query:data", async (ctx) => {
+    const action = parseReminderCallback(ctx.callbackQuery.data);
+    if (!action) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    try {
+      if (action.kind === "done") {
+        await ctx.answerCallbackQuery("Done");
+      } else if (onSnooze) {
+        await onSnooze(action.reminderId, action.minutes);
+        await ctx.answerCallbackQuery(`Snoozed ${action.minutes}m`);
+      } else {
+        await ctx.answerCallbackQuery("Snoozing is not available.");
+        return;
+      }
+      // Drop the buttons so the same reminder cannot be actioned twice from
+      // an old message still sitting in the chat history.
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+    } catch (err) {
+      logger.error("telegram.callback_error", {
+        kind: action.kind,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await ctx.answerCallbackQuery("That did not work.");
     }
   });
 

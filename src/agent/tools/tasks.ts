@@ -2,11 +2,10 @@ import { z } from "zod";
 import { defineTool, type ToolDefinition } from "../tool-registry.js";
 import {
   TASK_PRIORITIES,
-  TASK_REF_LENGTH,
   TASK_STATUSES,
-  taskRef,
   type TasksService,
 } from "../../domain/tasks/service.js";
+import { REF_LENGTH, shortRef } from "../../domain/reference.js";
 import type { TaskWithProject } from "../../db/repositories/tasks.js";
 import { DUE_FORMAT_HINT, formatInstant, parseDueAt } from "../../domain/datetime.js";
 
@@ -26,7 +25,7 @@ const refArg = z
   .string()
   .min(1)
   .max(36)
-  .describe(`The ${TASK_REF_LENGTH}-character task id shown in a task listing.`);
+  .describe(`The ${REF_LENGTH}-character task id shown in a task listing.`);
 
 const dueArg = z.string().min(1).max(40).describe(`When the task is due: ${DUE_FORMAT_HINT}.`);
 
@@ -49,7 +48,7 @@ interface TaskView {
 
 function view(task: TaskWithProject, timeZone: string): TaskView {
   return {
-    id: taskRef(task),
+    id: shortRef(task),
     title: task.title,
     status: task.status,
     ...(task.projectName ? { project: task.projectName } : {}),
