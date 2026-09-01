@@ -1,5 +1,5 @@
 # --- build stage ---
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 # `npm ci` (not `npm install`) so builds resolve exactly the committed lockfile.
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ COPY src ./src
 RUN npm run build
 
 # --- runtime stage ---
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
