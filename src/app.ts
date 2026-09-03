@@ -11,6 +11,7 @@ import { createProjectTools } from "./agent/tools/projects.js";
 import { createTaskTools } from "./agent/tools/tasks.js";
 import { createTimeTools } from "./agent/tools/time.js";
 import { createReminderTools } from "./agent/tools/reminders.js";
+import { createCalendarTools } from "./agent/tools/calendar.js";
 import { createProjectsRepository } from "./db/repositories/projects.js";
 import { createTasksRepository } from "./db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "./db/repositories/work-sessions.js";
@@ -19,6 +20,8 @@ import { createProjectsService } from "./domain/projects/service.js";
 import { createTasksService } from "./domain/tasks/service.js";
 import { createTimeService } from "./domain/time/service.js";
 import { createRemindersService } from "./domain/reminders/service.js";
+import { createCalendarService } from "./domain/calendar/service.js";
+import { createGoogleCalendar } from "./integrations/google-calendar/client.js";
 import { createReminderJobs, type ReminderDelivery } from "./jobs/reminders.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 import { createTelegramReminderDelivery } from "./channels/telegram/reminder-delivery.js";
@@ -71,12 +74,32 @@ async function main(): Promise<void> {
   });
   const remindersService = createRemindersService(remindersRepository, jobs.scheduler);
 
+  // Calendar is optional. Without it the assistant runs with everything else
+  // and simply has no calendar tools, rather than failing to start: a missing
+  // integration should not take the whole assistant down.
+  const calendarTools =
+    config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE && config.GOOGLE_CALENDAR_ID
+      ? createCalendarTools(
+          createCalendarService(
+            createGoogleCalendar({
+              keyFile: config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
+              calendarId: config.GOOGLE_CALENDAR_ID,
+            }),
+          ),
+          config.TZ,
+        )
+      : [];
+  if (calendarTools.length === 0) {
+    logger.warn("calendar.disabled", { reason: "GOOGLE_* not configured" });
+  }
+
   const tools = createToolRegistry(
     [
       ...createProjectTools(projectsService, config.TZ),
       ...createTaskTools(tasksService, config.TZ),
       ...createTimeTools(timeService, config.TZ),
       ...createReminderTools(remindersService, config.TZ),
+      ...calendarTools,
     ],
     logger,
   );
