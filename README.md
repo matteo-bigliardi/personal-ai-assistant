@@ -7,9 +7,10 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Projects, tasks, time tracking and persistent reminders are
-implemented end to end — the agent loop, the typed tool boundary and all sixteen
-tools work over Telegram. Google Calendar is next.
+**In progress.** Projects, tasks, time tracking, persistent reminders and Google
+Calendar are implemented end to end — the agent loop, the typed tool boundary and
+all twenty-one tools work over Telegram. A morning briefing and confirmation for
+destructive actions are next.
 
 ## Stack
 
@@ -150,6 +151,22 @@ configured timezone, so a task due Friday is not reported as overdue on Friday
 morning. The model never computes that instant: it reports the date it read off
 the per-turn calendar block, and the conversion, including which daylight-saving
 offset applies to that particular day, happens in `domain/datetime.ts`.
+
+Google Calendar is authoritative for appointments and is never mirrored into
+Postgres: every answer is a live read. Authentication is a service account with
+the calendar shared to it rather than an OAuth consent flow — an OAuth app left
+in Google's testing state hands out refresh tokens that expire weekly, and
+publishing one requires a domain, a privacy policy and a review, all to protect
+users of an app that has exactly one. The trade is that the service account is a
+separate identity: it manages the calendar shared with it, but cannot invite
+other people as the user.
+
+Free-slot search is pure interval arithmetic over the events read back, so
+overlapping meetings, one event containing another and events reaching in from
+outside the window are handled without a network round trip to test them.
+All-day events are reported next to the slots rather than counted as busy: a
+birthday would otherwise empty the day, and a birthday and a week of leave are
+not distinguishable through the API.
 
 Reminders are delivered by a background worker, never by the model: the text is
 written when the reminder is created, so it arrives on time even if the LLM is

@@ -21,6 +21,7 @@ import { createProjectTools } from "../src/agent/tools/projects.js";
 import { createTaskTools } from "../src/agent/tools/tasks.js";
 import { createTimeTools } from "../src/agent/tools/time.js";
 import { createReminderTools } from "../src/agent/tools/reminders.js";
+import { createCalendarTools } from "../src/agent/tools/calendar.js";
 import { createProjectsRepository } from "../src/db/repositories/projects.js";
 import { createTasksRepository } from "../src/db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "../src/db/repositories/work-sessions.js";
@@ -29,6 +30,8 @@ import { createProjectsService } from "../src/domain/projects/service.js";
 import { createTasksService } from "../src/domain/tasks/service.js";
 import { createTimeService } from "../src/domain/time/service.js";
 import { createRemindersService } from "../src/domain/reminders/service.js";
+import { createCalendarService } from "../src/domain/calendar/service.js";
+import { createGoogleCalendar } from "../src/integrations/google-calendar/client.js";
 import { createReminderJobs } from "../src/jobs/reminders.js";
 
 const messages = process.argv.slice(2);
@@ -75,6 +78,17 @@ const tools = createToolRegistry(
     ...createTaskTools(tasksService, config.TZ),
     ...createTimeTools(timeService, config.TZ),
     ...createReminderTools(remindersService, config.TZ),
+    ...(config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE && config.GOOGLE_CALENDAR_ID
+      ? createCalendarTools(
+          createCalendarService(
+            createGoogleCalendar({
+              keyFile: config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
+              calendarId: config.GOOGLE_CALENDAR_ID,
+            }),
+          ),
+          config.TZ,
+        )
+      : []),
   ],
   logger,
 );
