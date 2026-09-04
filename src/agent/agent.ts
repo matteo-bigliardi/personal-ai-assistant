@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { formatNowBlock } from "../domain/datetime.js";
 import { createNoopAuditSink, type AuditSink } from "../observability/audit.js";
 import type { Logger } from "../observability/logger.js";
@@ -28,6 +29,12 @@ Operating rules:
   clock. Never do calendar arithmetic from memory.
 - A tool result containing "error" means the action did NOT happen. Read the
   message, correct the arguments and retry, or explain the problem.
+- Some actions need the user's agreement first. A result with code
+  "confirmation_required" means nothing has been done yet: say plainly what is
+  about to happen, naming the thing and its time, and then stop — end your reply
+  there without calling further tools. Calling the tool again in the same turn
+  will not work and will not do anything. When the user agrees in their next
+  message, call it again with the same arguments and it will go through.
 - Answer in the language the user writes in. Keep it short: this is a chat, not
   a report. Plain text, no markdown tables.`;
 
@@ -82,6 +89,9 @@ export function createAgent(opts: AgentOptions): Agent {
   return {
     async handleMessage({ chatId, text }): Promise<string> {
       const startedAt = Date.now();
+      // Identifies this message for the confirmation flow: a destructive action
+      // authorised under one turn id can only run under a later one.
+      const turnId = randomUUID();
       const context = formatNowBlock(clock(), timeZone);
       const messages: Turn[] = [
         ...conversations.get(chatId),
@@ -127,7 +137,7 @@ export function createAgent(opts: AgentOptions): Agent {
         // Independent calls in one response are executed together; each one
         // validates its own arguments and reports its own failure.
         const results = await Promise.all(
-          result.toolCalls.map((call) => tools.execute(call, { chatId })),
+          result.toolCalls.map((call) => tools.execute(call, { chatId, turnId })),
         );
         messages.push({ role: "tool", results });
       }

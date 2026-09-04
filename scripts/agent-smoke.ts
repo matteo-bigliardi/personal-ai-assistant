@@ -99,7 +99,7 @@ const tools = createToolRegistry(
       : []),
   ],
   logger,
-  audit,
+  { audit },
 );
 const agent = createAgent({
   provider: createAnthropicProvider({

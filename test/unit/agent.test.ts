@@ -240,3 +240,68 @@ describe("agent audit", () => {
     expect(audit.turns[0]).toMatchObject({ status: "error", errorCode: "iteration_limit" });
   });
 });
+
+describe("agent turn identity", () => {
+  /** A tool that records the context it was handed. */
+  function contextRecorder(seen: { chatId: string; turnId: string }[]) {
+    const tool = defineTool({
+      name: "create_project",
+      description: "Create a project.",
+      schema: z.object({ name: z.string() }),
+      async execute(_input, context) {
+        seen.push({ ...context });
+        return {};
+      },
+    });
+    return createToolRegistry([tool], createTestLogger());
+  }
+
+  it("gives every tool call in one message the same turn id", async () => {
+    const seen: { chatId: string; turnId: string }[] = [];
+    const provider = fakeProvider([
+      {
+        toolCalls: [
+          { id: "c1", name: "create_project", input: { name: "Atlas" } },
+          { id: "c2", name: "create_project", input: { name: "Borealis" } },
+        ],
+      },
+      { text: "done" },
+    ]);
+    const agent = createAgent({
+      provider,
+      tools: contextRecorder(seen),
+      logger: createTestLogger(),
+      timeZone: "Europe/Rome",
+      now: () => NOW,
+    });
+
+    await agent.handleMessage({ chatId: "1", text: "create two" });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.turnId).toBe(seen[1]?.turnId);
+  });
+
+  it("gives a new message a new turn id, which is what lets a confirmation be spent", async () => {
+    const seen: { chatId: string; turnId: string }[] = [];
+    // One tool call per message, so both messages reach the recorder.
+    const provider = fakeProvider([
+      { toolCalls: [{ id: "c1", name: "create_project", input: { name: "Atlas" } }] },
+      { text: "done" },
+      { toolCalls: [{ id: "c2", name: "create_project", input: { name: "Borealis" } }] },
+      { text: "done" },
+    ]);
+    const agent = createAgent({
+      provider,
+      tools: contextRecorder(seen),
+      logger: createTestLogger(),
+      timeZone: "Europe/Rome",
+      now: () => NOW,
+    });
+
+    await agent.handleMessage({ chatId: "1", text: "first" });
+    await agent.handleMessage({ chatId: "1", text: "second" });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.turnId).not.toBe(seen[1]?.turnId);
+  });
+});

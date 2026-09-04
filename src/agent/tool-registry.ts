@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DomainError } from "../domain/errors.js";
 import { createNoopAuditSink, type AuditSink } from "../observability/audit.js";
 import type { Logger } from "../observability/logger.js";
+import { createConfirmationStore, fingerprintOf, type ConfirmationStore } from "./confirmations.js";
 import type { ToolCall, ToolResult, ToolSpec } from "./providers/types.js";
 
 /**
@@ -14,9 +15,10 @@ import type { ToolCall, ToolResult, ToolSpec } from "./providers/types.js";
  * `isError` set rather than a thrown exception, so the model can read the
  * reason and correct itself within the same turn.
  *
- * This is also the one place every tool call passes through, so it is where the
- * audit trail is written: a new tool is audited by existing, without adding a
- * line to itself.
+ * This is the one place every tool call passes through, which makes it where
+ * two cross-cutting rules are enforced rather than hoped for: the audit trail
+ * is written here, and a destructive action cannot run here until the user has
+ * been asked in an earlier turn.
  */
 
 /** Results larger than this are truncated to keep the context bounded. */
@@ -30,6 +32,12 @@ const MAX_RESULT_CHARS = 8_000;
  */
 export interface ToolContext {
   chatId: string;
+  /**
+   * Identifies the user message being handled. A confirmation issued under one
+   * turn id may only be spent under a different one, which is what forces the
+   * assistant to actually ask before it destroys anything.
+   */
+  turnId: string;
 }
 
 export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
@@ -38,15 +46,18 @@ export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
   description: string;
   schema: S;
   /**
-   * Destructive tools require an explicit user confirmation before running.
-   * The registry records the flag; the confirmation flow itself lands with the
-   * hardening work.
+   * Decides whether this particular call needs the user's blessing, and says
+   * what is about to happen. Returning a string demands confirmation and gives
+   * the sentence the user should see; returning undefined lets the call run.
+   *
+   * It takes the arguments because destructiveness usually depends on them:
+   * `update_project` is harmless until the status is `archived`.
    */
-  destructive?: boolean;
+  confirm?(input: z.output<S>): string | undefined;
   execute(input: z.output<S>, context: ToolContext): Promise<unknown>;
 }
 
-/** Preserves the schema's inferred type through to `execute`. */
+/** Preserves the schema's inferred type through to `execute` and `confirm`. */
 export function defineTool<S extends z.ZodType>(def: ToolDefinition<S>): ToolDefinition {
   return def as unknown as ToolDefinition;
 }
@@ -77,11 +88,19 @@ function errorResult(id: string, code: string, message: string): ToolResult {
   return { id, content: JSON.stringify({ error: { code, message } }), isError: true };
 }
 
+export interface ToolRegistryOptions {
+  audit?: AuditSink;
+  confirmations?: ConfirmationStore;
+}
+
 export function createToolRegistry(
   defs: ToolDefinition[],
   logger: Logger,
-  audit: AuditSink = createNoopAuditSink(),
+  options: ToolRegistryOptions = {},
 ): ToolRegistry {
+  const audit = options.audit ?? createNoopAuditSink();
+  const confirmations = options.confirmations ?? createConfirmationStore();
+
   const byName = new Map<string, ToolDefinition>();
   for (const def of defs) {
     if (byName.has(def.name)) throw new Error(`Duplicate tool name: ${def.name}`);
@@ -135,6 +154,35 @@ export function createToolRegistry(
           errorResult(call.id, "invalid_input", `Invalid arguments — ${issues}`),
           "invalid_input",
         );
+      }
+
+      const needed = def.confirm?.(parsed.data);
+      if (needed !== undefined) {
+        const request = {
+          chatId: context.chatId,
+          turnId: context.turnId,
+          tool: def.name,
+          fingerprint: fingerprintOf(def.name, parsed.data),
+        };
+
+        const redeemed = confirmations.redeem(request);
+        if (!redeemed.ok) {
+          // Record what was asked for and refuse. The identical call, made
+          // while handling the user's next message, is what goes through.
+          confirmations.request(request);
+          logger.info("tool.confirmation_required", { tool: call.name, was: redeemed.reason });
+          return done(
+            errorResult(
+              call.id,
+              "confirmation_required",
+              `${needed} NOTHING HAS BEEN DONE. Tell the user exactly what is about to happen ` +
+                `and stop there: end your turn without calling any more tools. If they agree, ` +
+                `call this tool again, with the same arguments, when handling their reply.`,
+            ),
+            "confirmation_required",
+          );
+        }
+        logger.info("tool.confirmed", { tool: call.name });
       }
 
       try {

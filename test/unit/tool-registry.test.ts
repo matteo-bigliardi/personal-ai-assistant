@@ -19,7 +19,7 @@ function parse(content: string): Record<string, unknown> {
   return JSON.parse(content) as Record<string, unknown>;
 }
 
-const CONTEXT = { chatId: "chat-1" };
+const CONTEXT = { chatId: "chat-1", turnId: "turn-1" };
 
 describe("createToolRegistry", () => {
   it("advertises each tool as a JSON Schema object", () => {
@@ -134,7 +134,7 @@ describe("createToolRegistry", () => {
 describe("tool registry audit", () => {
   it("records every call, successful or not, by argument shape", async () => {
     const audit = createRecordingAuditSink();
-    const registry = createToolRegistry([echo], createTestLogger(), audit);
+    const registry = createToolRegistry([echo], createTestLogger(), { audit });
 
     await registry.execute({ id: "t1", name: "echo", input: { message: "hi" } }, CONTEXT);
     await registry.execute({ id: "t2", name: "echo", input: { message: 42 } }, CONTEXT);
@@ -160,7 +160,7 @@ describe("tool registry audit", () => {
         throw new ConflictError("already exists");
       },
     });
-    const registry = createToolRegistry([failing], createTestLogger(), audit);
+    const registry = createToolRegistry([failing], createTestLogger(), { audit });
 
     await registry.execute({ id: "t1", name: "boom", input: {} }, CONTEXT);
 
@@ -184,7 +184,7 @@ describe("tool registry audit", () => {
       },
       logger,
     });
-    const registry = createToolRegistry([echo], logger, audit);
+    const registry = createToolRegistry([echo], logger, { audit });
 
     const result = await registry.execute(
       { id: "t1", name: "echo", input: { message: "hi" } },

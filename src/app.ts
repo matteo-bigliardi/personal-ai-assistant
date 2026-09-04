@@ -8,6 +8,7 @@ import { runMigrations } from "./db/migrate.js";
 import { createAnthropicProvider } from "./agent/providers/anthropic.js";
 import { createAgent } from "./agent/agent.js";
 import { createToolRegistry } from "./agent/tool-registry.js";
+import { createConfirmationStore } from "./agent/confirmations.js";
 import { createProjectTools } from "./agent/tools/projects.js";
 import { createTaskTools } from "./agent/tools/tasks.js";
 import { createTimeTools } from "./agent/tools/time.js";
@@ -52,6 +53,11 @@ async function main(): Promise<void> {
   // A failed audit write is logged and swallowed there, never propagated.
   const auditRepository = createAuditRepository(database.db);
   const audit = createAuditSink({ repo: auditRepository, logger });
+
+  // Destructive actions are held here until the user has agreed in an earlier
+  // turn. In memory on purpose: a restart costs one repeated question, which is
+  // the safe direction to fail in.
+  const confirmations = createConfirmationStore();
 
   const provider = createAnthropicProvider({
     apiKey: config.ANTHROPIC_API_KEY,
@@ -148,7 +154,7 @@ async function main(): Promise<void> {
       ...briefingTools,
     ],
     logger,
-    audit,
+    { audit, confirmations },
   );
 
   const agent = createAgent({

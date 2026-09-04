@@ -90,6 +90,13 @@ export function createProjectTools(service: ProjectsService, timeZone: string): 
 
     defineTool({
       name: "update_project",
+      // Archiving is the soft delete, and it hides the project and its tasks
+      // from every default listing — destructive enough to be worth a question.
+      // Every other update is not, which is why this looks at the arguments.
+      confirm: ({ name, status }) =>
+        status === "archived"
+          ? `About to archive the project "${name}", hiding it and its tasks from listings.`
+          : undefined,
       description:
         "Change a project's name, description or status. " +
         "Set status to 'completed' or 'archived' instead of deleting a project.",

@@ -142,9 +142,9 @@ export function createCalendarTools(service: CalendarService, timeZone: string):
 
     defineTool({
       name: "delete_calendar_event",
-      // Deleting an appointment is not recoverable from here, so the flag is
-      // set now and the confirmation flow will pick it up.
-      destructive: true,
+      // Not recoverable from here, so the registry holds it until the user has
+      // been asked in an earlier turn. The summary is what they get shown.
+      confirm: ({ event_id }) => `About to permanently delete calendar event ${event_id}.`,
       description:
         "Delete an event from the calendar. This cannot be undone, so confirm with the user " +
         "first, naming the event and its time. On a recurring event only that occurrence goes.",
