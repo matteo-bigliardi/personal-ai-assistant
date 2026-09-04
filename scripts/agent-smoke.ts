@@ -33,6 +33,8 @@ import { createRemindersService } from "../src/domain/reminders/service.js";
 import { createCalendarService } from "../src/domain/calendar/service.js";
 import { createGoogleCalendar } from "../src/integrations/google-calendar/client.js";
 import { createReminderJobs } from "../src/jobs/reminders.js";
+import { createAuditRepository } from "../src/db/repositories/audit.js";
+import { createAuditSink } from "../src/observability/audit.js";
 
 const messages = process.argv.slice(2);
 if (messages.length === 0) {
@@ -72,6 +74,10 @@ const remindersService = createRemindersService(
   jobs.scheduler,
 );
 
+// The smoke script writes to the audit trail too: it is the cheapest way to
+// see the table fill up without waiting for real chat traffic.
+const audit = createAuditSink({ repo: createAuditRepository(database.db), logger });
+
 const tools = createToolRegistry(
   [
     ...createProjectTools(projectsService, config.TZ),
@@ -91,6 +97,7 @@ const tools = createToolRegistry(
       : []),
   ],
   logger,
+  audit,
 );
 const agent = createAgent({
   provider: createAnthropicProvider({
@@ -100,6 +107,7 @@ const agent = createAgent({
   tools,
   logger,
   timeZone: config.TZ,
+  audit,
 });
 
 await jobs.start();

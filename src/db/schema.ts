@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -151,6 +152,57 @@ export const reminders = pgTable(
   ],
 );
 
+/**
+ * Audit trail.
+ *
+ * Two kinds of row: one per tool call, written by the registry, and one per
+ * user turn, written by the agent loop. Both already existed as log lines; the
+ * table is what makes them outlive the process, so tool-selection accuracy,
+ * latency and cost can be measured over weeks instead of over a `tail -f`.
+ *
+ * This is the first table here that grows monotonically — one row per tool
+ * call, forever — so it is swept on a retention window rather than kept.
+ */
+export const auditEventType = pgEnum("audit_event_type", ["tool_call", "agent_turn"]);
+
+export const auditStatus = pgEnum("audit_status", ["ok", "error"]);
+
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    timestamp: timestamp("timestamp", { withTimezone: true }).notNull().defaultNow(),
+    eventType: auditEventType("event_type").notNull(),
+    /** The tool that ran. Set on `tool_call` rows only. */
+    tool: text("tool"),
+    /**
+     * Argument *shape*, never argument values: `{"title":"string(24)"}`.
+     *
+     * Tool arguments carry the user's own words — task titles, reminder texts,
+     * event names — and this is the one table kept for months. Names, types and
+     * sizes are what the accuracy metrics need; the values would only turn the
+     * audit trail into a second copy of every conversation.
+     */
+    arguments: jsonb("arguments").$type<Record<string, string>>(),
+    status: auditStatus("status").notNull(),
+    /** Domain code (`not_found`, `invalid_input`, …) when `status` is `error`. */
+    errorCode: text("error_code"),
+    latencyMs: integer("latency_ms"),
+    /** Model that served the turn. Set on `agent_turn` rows only. */
+    model: text("model"),
+    /** Provider round trips the turn took. Set on `agent_turn` rows only. */
+    iterations: integer("iterations"),
+    /** Token counters, cache hits included, as reported by the provider. */
+    tokenCostMetadata: jsonb("token_cost_metadata").$type<Record<string, number>>(),
+  },
+  (t) => [
+    // The two reads this table gets: recent activity, and the retention sweep.
+    index("audit_events_timestamp_idx").on(t.timestamp),
+    // Per-tool accuracy and latency — the metrics spec §18 asks to preserve.
+    index("audit_events_tool_idx").on(t.tool, t.timestamp),
+  ],
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
@@ -159,3 +211,5 @@ export type WorkSession = typeof workSessions.$inferSelect;
 export type NewWorkSession = typeof workSessions.$inferInsert;
 export type Reminder = typeof reminders.$inferSelect;
 export type NewReminder = typeof reminders.$inferInsert;
+export type AuditEvent = typeof auditEvents.$inferSelect;
+export type NewAuditEvent = typeof auditEvents.$inferInsert;

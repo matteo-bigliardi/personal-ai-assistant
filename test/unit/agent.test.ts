@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAgent } from "../../src/agent/agent.js";
 import { createToolRegistry, defineTool } from "../../src/agent/tool-registry.js";
 import type { AgentInput, AgentTurnResult, LlmProvider } from "../../src/agent/providers/types.js";
+import { createRecordingAuditSink } from "../helpers/audit.js";
 import { createTestLogger } from "../helpers/logger.js";
 
 const NOW = new Date("2026-08-29T12:37:00Z");
@@ -199,5 +200,43 @@ describe("agent loop", () => {
       cacheWriteTokens: 2000,
       cacheReadTokens: 2000,
     });
+  });
+});
+
+describe("agent audit", () => {
+  it("records the turn with its round trips, model and token counters", async () => {
+    const audit = createRecordingAuditSink();
+    const provider = fakeProvider([
+      {
+        toolCalls: [{ id: "c1", name: "create_project", input: { name: "Atlas" } }],
+        model: "claude-sonnet-5",
+        usage: { inputTokens: 100, outputTokens: 10, cacheReadInputTokens: 12646 },
+      },
+      { text: "Created Atlas.", model: "claude-sonnet-5", usage: { outputTokens: 8 } },
+    ]);
+
+    await agentWith(provider, { audit }).handleMessage({ chatId: "1", text: "create Atlas" });
+
+    expect(audit.turns).toHaveLength(1);
+    expect(audit.turns[0]).toMatchObject({
+      status: "ok",
+      iterations: 2,
+      model: "claude-sonnet-5",
+      tokens: { inputTokens: 100, outputTokens: 18, cacheReadTokens: 12646 },
+    });
+  });
+
+  it("marks a turn that ran out of iterations as a failure", async () => {
+    const audit = createRecordingAuditSink();
+    const provider = fakeProvider([
+      { toolCalls: [{ id: "c1", name: "create_project", input: { name: "Atlas" } }] },
+    ]);
+
+    await agentWith(provider, { audit, maxIterations: 2 }).handleMessage({
+      chatId: "1",
+      text: "go",
+    });
+
+    expect(audit.turns[0]).toMatchObject({ status: "error", errorCode: "iteration_limit" });
   });
 });

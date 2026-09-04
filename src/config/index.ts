@@ -31,6 +31,10 @@ const schema = z
 
     DATABASE_URL: z.url(),
 
+    // The audit trail is the one table that grows with use rather than with
+    // work, so it is kept on a window instead of forever.
+    AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+
     TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
     TELEGRAM_ALLOWED_USER_IDS: csvNumbers,
 

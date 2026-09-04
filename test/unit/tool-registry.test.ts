@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createToolRegistry, defineTool } from "../../src/agent/tool-registry.js";
 import { ConflictError } from "../../src/domain/errors.js";
+import { createAuditSink } from "../../src/observability/audit.js";
+import { createRecordingAuditSink } from "../helpers/audit.js";
 import { createTestLogger } from "../helpers/logger.js";
 
 const echo = defineTool({
@@ -126,5 +128,70 @@ describe("createToolRegistry", () => {
 
     expect(result.content.length).toBeLessThan(8_100);
     expect(result.content).toContain("truncated");
+  });
+});
+
+describe("tool registry audit", () => {
+  it("records every call, successful or not, by argument shape", async () => {
+    const audit = createRecordingAuditSink();
+    const registry = createToolRegistry([echo], createTestLogger(), audit);
+
+    await registry.execute({ id: "t1", name: "echo", input: { message: "hi" } }, CONTEXT);
+    await registry.execute({ id: "t2", name: "echo", input: { message: 42 } }, CONTEXT);
+    await registry.execute({ id: "t3", name: "nope", input: {} }, CONTEXT);
+
+    expect(audit.toolCalls.map((c) => [c.tool, c.status, c.errorCode])).toEqual([
+      ["echo", "ok", undefined],
+      ["echo", "error", "invalid_input"],
+      ["nope", "error", "unknown_tool"],
+    ]);
+    // The raw input reaches the sink; turning it into a shape is the sink's job.
+    expect(audit.toolCalls[0]?.input).toEqual({ message: "hi" });
+    expect(audit.toolCalls[0]?.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records the domain code a failing tool returned", async () => {
+    const audit = createRecordingAuditSink();
+    const failing = defineTool({
+      name: "boom",
+      description: "Always conflicts.",
+      schema: z.object({}),
+      async execute() {
+        throw new ConflictError("already exists");
+      },
+    });
+    const registry = createToolRegistry([failing], createTestLogger(), audit);
+
+    await registry.execute({ id: "t1", name: "boom", input: {} }, CONTEXT);
+
+    expect(audit.toolCalls[0]).toMatchObject({ status: "error", errorCode: "conflict" });
+  });
+
+  it("returns the tool result even when the audit write fails", async () => {
+    // Auditing must never break the thing it audits: the tool already ran.
+    const logger = createTestLogger();
+    const audit = createAuditSink({
+      repo: {
+        async record() {
+          throw new Error("audit_events is gone");
+        },
+        async list() {
+          return [];
+        },
+        async deleteOlderThan() {
+          return 0;
+        },
+      },
+      logger,
+    });
+    const registry = createToolRegistry([echo], logger, audit);
+
+    const result = await registry.execute(
+      { id: "t1", name: "echo", input: { message: "hi" } },
+      CONTEXT,
+    );
+
+    expect(parse(result.content)).toEqual({ message: "hi", times: 1 });
+    expect(logger.find("audit.write_failed")).toBeDefined();
   });
 });

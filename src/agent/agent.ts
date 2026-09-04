@@ -1,4 +1,5 @@
 import { formatNowBlock } from "../domain/datetime.js";
+import { createNoopAuditSink, type AuditSink } from "../observability/audit.js";
 import type { Logger } from "../observability/logger.js";
 import { createConversationStore, type ConversationStore } from "./history.js";
 import type { AgentTurnResult, LlmProvider, Turn } from "./providers/types.js";
@@ -40,6 +41,7 @@ export interface AgentOptions {
   logger: Logger;
   timeZone: string;
   conversations?: ConversationStore;
+  audit?: AuditSink;
   /** Upper bound on provider round trips per user message. */
   maxIterations?: number;
   now?: () => Date;
@@ -73,11 +75,13 @@ function accumulate(totals: Totals, result: AgentTurnResult): void {
 export function createAgent(opts: AgentOptions): Agent {
   const { provider, tools, logger, timeZone } = opts;
   const conversations = opts.conversations ?? createConversationStore();
+  const audit = opts.audit ?? createNoopAuditSink();
   const maxIterations = opts.maxIterations ?? 5;
   const clock = opts.now ?? (() => new Date());
 
   return {
     async handleMessage({ chatId, text }): Promise<string> {
+      const startedAt = Date.now();
       const context = formatNowBlock(clock(), timeZone);
       const messages: Turn[] = [
         ...conversations.get(chatId),
@@ -95,6 +99,7 @@ export function createAgent(opts: AgentOptions): Agent {
       let answer = "";
       let iterations = 0;
       let exhausted = true;
+      let model: string | undefined;
 
       for (let i = 0; i < maxIterations; i++) {
         iterations = i + 1;
@@ -104,6 +109,7 @@ export function createAgent(opts: AgentOptions): Agent {
           tools: tools.specs,
         });
         accumulate(totals, result);
+        model = result.model ?? model;
 
         if (result.text) answer = result.text;
 
@@ -137,6 +143,24 @@ export function createAgent(opts: AgentOptions): Agent {
         chatId,
         iterations,
         ...totals,
+      });
+
+      // The audited latency is wall clock, not the sum of the provider calls:
+      // it is what the user actually waited for, tool execution included, which
+      // is the number the system latency percentiles are supposed to describe.
+      await audit.agentTurn({
+        status: exhausted ? "error" : "ok",
+        ...(exhausted ? { errorCode: "iteration_limit" } : {}),
+        iterations,
+        latencyMs: Date.now() - startedAt,
+        model,
+        tokens: {
+          inputTokens: totals.inputTokens,
+          outputTokens: totals.outputTokens,
+          cacheReadTokens: totals.cacheReadTokens,
+          cacheWriteTokens: totals.cacheWriteTokens,
+          providerLatencyMs: totals.latencyMs,
+        },
       });
 
       const reply = answer || "…";

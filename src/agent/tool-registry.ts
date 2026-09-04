@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DomainError } from "../domain/errors.js";
+import { createNoopAuditSink, type AuditSink } from "../observability/audit.js";
 import type { Logger } from "../observability/logger.js";
 import type { ToolCall, ToolResult, ToolSpec } from "./providers/types.js";
 
@@ -12,6 +13,10 @@ import type { ToolCall, ToolResult, ToolSpec } from "./providers/types.js";
  * A tool result is always structured, and a failure is a normal result with
  * `isError` set rather than a thrown exception, so the model can read the
  * reason and correct itself within the same turn.
+ *
+ * This is also the one place every tool call passes through, so it is where the
+ * audit trail is written: a new tool is audited by existing, without adding a
+ * line to itself.
  */
 
 /** Results larger than this are truncated to keep the context bounded. */
@@ -72,7 +77,11 @@ function errorResult(id: string, code: string, message: string): ToolResult {
   return { id, content: JSON.stringify({ error: { code, message } }), isError: true };
 }
 
-export function createToolRegistry(defs: ToolDefinition[], logger: Logger): ToolRegistry {
+export function createToolRegistry(
+  defs: ToolDefinition[],
+  logger: Logger,
+  audit: AuditSink = createNoopAuditSink(),
+): ToolRegistry {
   const byName = new Map<string, ToolDefinition>();
   for (const def of defs) {
     if (byName.has(def.name)) throw new Error(`Duplicate tool name: ${def.name}`);
@@ -90,10 +99,30 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
     has: (name) => byName.has(name),
 
     async execute(call: ToolCall, context: ToolContext): Promise<ToolResult> {
+      const start = Date.now();
+
+      // Every exit from this method goes through here, so no path can be added
+      // later that quietly escapes the audit.
+      const done = async (result: ToolResult, errorCode?: string): Promise<ToolResult> => {
+        await audit.toolCall({
+          tool: call.name,
+          input: call.input,
+          status: result.isError ? "error" : "ok",
+          errorCode,
+          latencyMs: Date.now() - start,
+        });
+        return result;
+      };
+
       const def = byName.get(call.name);
       if (!def) {
+        // Worth recording rather than dropping: a tool the model invented is a
+        // tool-selection failure, which is one of the numbers this table is for.
         logger.warn("tool.unknown", { tool: call.name });
-        return errorResult(call.id, "unknown_tool", `No tool named "${call.name}".`);
+        return done(
+          errorResult(call.id, "unknown_tool", `No tool named "${call.name}".`),
+          "unknown_tool",
+        );
       }
 
       const parsed = def.schema.safeParse(call.input);
@@ -102,14 +131,16 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
           .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
           .join("; ");
         logger.warn("tool.invalid_input", { tool: call.name, issues });
-        return errorResult(call.id, "invalid_input", `Invalid arguments — ${issues}`);
+        return done(
+          errorResult(call.id, "invalid_input", `Invalid arguments — ${issues}`),
+          "invalid_input",
+        );
       }
 
-      const start = Date.now();
       try {
         const output = await def.execute(parsed.data, context);
         logger.info("tool.call", { tool: call.name, ok: true, latencyMs: Date.now() - start });
-        return { id: call.id, content: serialise(output) };
+        return done({ id: call.id, content: serialise(output) });
       } catch (err) {
         const latencyMs = Date.now() - start;
         if (err instanceof DomainError) {
@@ -120,7 +151,7 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
             code: err.code,
             latencyMs,
           });
-          return errorResult(call.id, err.code, err.message);
+          return done(errorResult(call.id, err.code, err.message), err.code);
         }
         // Unexpected fault: log the detail, tell the model nothing specific.
         logger.error("tool.failed", {
@@ -128,7 +159,10 @@ export function createToolRegistry(defs: ToolDefinition[], logger: Logger): Tool
           latencyMs,
           error: err instanceof Error ? err.message : String(err),
         });
-        return errorResult(call.id, "internal_error", "The tool failed unexpectedly.");
+        return done(
+          errorResult(call.id, "internal_error", "The tool failed unexpectedly."),
+          "internal_error",
+        );
       }
     },
   };

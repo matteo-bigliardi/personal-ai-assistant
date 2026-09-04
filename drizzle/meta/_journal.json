@@ -22,6 +22,13 @@
       "when": 1788208576101,
       "tag": "0002_smiling_thaddeus_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788555097407,
+      "tag": "0003_bright_mojo",
+      "breakpoints": true
     }
   ]
 }

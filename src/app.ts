@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { loadConfig } from "./config/index.js";
 import { createLogger } from "./observability/logger.js";
+import { createAuditSink } from "./observability/audit.js";
 import { createDb } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { createAnthropicProvider } from "./agent/providers/anthropic.js";
@@ -16,6 +17,7 @@ import { createProjectsRepository } from "./db/repositories/projects.js";
 import { createTasksRepository } from "./db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "./db/repositories/work-sessions.js";
 import { createRemindersRepository } from "./db/repositories/reminders.js";
+import { createAuditRepository } from "./db/repositories/audit.js";
 import { createProjectsService } from "./domain/projects/service.js";
 import { createTasksService } from "./domain/tasks/service.js";
 import { createTimeService } from "./domain/time/service.js";
@@ -23,6 +25,7 @@ import { createRemindersService } from "./domain/reminders/service.js";
 import { createCalendarService } from "./domain/calendar/service.js";
 import { createGoogleCalendar } from "./integrations/google-calendar/client.js";
 import { createReminderJobs, type ReminderDelivery } from "./jobs/reminders.js";
+import { createAuditRetention } from "./jobs/audit-retention.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 import { createTelegramReminderDelivery } from "./channels/telegram/reminder-delivery.js";
 
@@ -36,6 +39,12 @@ async function main(): Promise<void> {
   await database.ping();
   await runMigrations(database.db);
   logger.info("db.ready");
+
+  // Audit is wired at the composition root and handed to the two places
+  // every action passes through: the tool registry and the agent loop.
+  // A failed audit write is logged and swallowed there, never propagated.
+  const auditRepository = createAuditRepository(database.db);
+  const audit = createAuditSink({ repo: auditRepository, logger });
 
   const provider = createAnthropicProvider({
     apiKey: config.ANTHROPIC_API_KEY,
@@ -102,6 +111,7 @@ async function main(): Promise<void> {
       ...calendarTools,
     ],
     logger,
+    audit,
   );
 
   const agent = createAgent({
@@ -109,6 +119,7 @@ async function main(): Promise<void> {
     tools,
     logger,
     timeZone: config.TZ,
+    audit,
   });
   logger.info("agent.ready", { tools: tools.specs.map((t) => t.name) });
 
@@ -127,6 +138,13 @@ async function main(): Promise<void> {
   // process was down goes out now, late rather than never.
   await jobs.start();
   await jobs.recover();
+
+  const retention = createAuditRetention({
+    repo: auditRepository,
+    logger,
+    retentionDays: config.AUDIT_RETENTION_DAYS,
+  });
+  retention.start();
 
   // Minimal HTTP surface: health check only (Telegram uses long polling in V1).
   const http = new Hono();
@@ -153,6 +171,7 @@ async function main(): Promise<void> {
     logger.info("shutdown", { signal });
     await bot.stop();
     await jobs.stop();
+    retention.stop();
     server.close();
     await database.close();
     process.exit(0);
