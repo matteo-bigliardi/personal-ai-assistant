@@ -1,4 +1,4 @@
-import { PgBoss, type Job } from "pg-boss";
+import type { Job, PgBoss } from "pg-boss";
 import type { RemindersRepository } from "../db/repositories/reminders.js";
 import type { ReminderScheduler } from "../domain/reminders/service.js";
 import type { Logger } from "../observability/logger.js";
@@ -35,7 +35,8 @@ export interface ReminderDelivery {
 }
 
 export interface ReminderJobsOptions {
-  connectionString: string;
+  /** Shared with every other job; started and stopped by its owner. */
+  boss: PgBoss;
   repo: RemindersRepository;
   delivery: ReminderDelivery;
   logger: Logger;
@@ -44,25 +45,18 @@ export interface ReminderJobsOptions {
 
 export interface ReminderJobs {
   scheduler: ReminderScheduler;
-  /** Starts the queue and the worker. */
+  /** Registers the queue and the worker. The queue itself is already running. */
   start(): Promise<void>;
   /**
    * Reconciles the queue with the database: delivers what fell due while the
    * process was down and re-schedules everything still ahead.
    */
   recover(): Promise<{ delivered: number; rescheduled: number }>;
-  stop(): Promise<void>;
 }
 
 export function createReminderJobs(opts: ReminderJobsOptions): ReminderJobs {
-  const { repo, delivery, logger } = opts;
+  const { boss, repo, delivery, logger } = opts;
   const clock = opts.now ?? (() => new Date());
-
-  // pg-boss keeps its own tables in its own schema, so it never collides with
-  // the application schema or with Drizzle's migrations.
-  const boss = new PgBoss({ connectionString: opts.connectionString, schema: "pgboss" });
-
-  boss.on("error", (error: unknown) => logger.error("jobs.error", { error: String(error) }));
 
   /**
    * Delivers one reminder, or does nothing if it is no longer deliverable.
@@ -120,7 +114,6 @@ export function createReminderJobs(opts: ReminderJobsOptions): ReminderJobs {
     scheduler,
 
     async start() {
-      await boss.start();
       await boss.createQueue(REMINDER_QUEUE);
       await boss.work<ReminderJob>(REMINDER_QUEUE, async (jobs: Job<ReminderJob>[]) => {
         for (const job of jobs) {
@@ -162,10 +155,6 @@ export function createReminderJobs(opts: ReminderJobsOptions): ReminderJobs {
         logger.info("reminders.recovered", { delivered, rescheduled });
       }
       return { delivered, rescheduled };
-    },
-
-    async stop() {
-      await boss.stop({ graceful: true });
     },
   };
 }

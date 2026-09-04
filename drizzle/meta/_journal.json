@@ -29,6 +29,13 @@
       "when": 1788555097407,
       "tag": "0003_bright_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788557028825,
+      "tag": "0004_unusual_prodigy",
+      "breakpoints": true
     }
   ]
 }

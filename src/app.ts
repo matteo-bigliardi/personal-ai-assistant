@@ -13,21 +13,28 @@ import { createTaskTools } from "./agent/tools/tasks.js";
 import { createTimeTools } from "./agent/tools/time.js";
 import { createReminderTools } from "./agent/tools/reminders.js";
 import { createCalendarTools } from "./agent/tools/calendar.js";
+import { createBriefingTools } from "./agent/tools/briefing.js";
+import { createBriefingWriter } from "./agent/briefing.js";
 import { createProjectsRepository } from "./db/repositories/projects.js";
 import { createTasksRepository } from "./db/repositories/tasks.js";
 import { createWorkSessionsRepository } from "./db/repositories/work-sessions.js";
 import { createRemindersRepository } from "./db/repositories/reminders.js";
 import { createAuditRepository } from "./db/repositories/audit.js";
+import { createBriefingRepository } from "./db/repositories/briefing.js";
 import { createProjectsService } from "./domain/projects/service.js";
 import { createTasksService } from "./domain/tasks/service.js";
 import { createTimeService } from "./domain/time/service.js";
 import { createRemindersService } from "./domain/reminders/service.js";
 import { createCalendarService } from "./domain/calendar/service.js";
+import { createBriefingService, type BriefingScheduler } from "./domain/briefing/service.js";
 import { createGoogleCalendar } from "./integrations/google-calendar/client.js";
 import { createReminderJobs, type ReminderDelivery } from "./jobs/reminders.js";
+import { createJobQueue } from "./jobs/queue.js";
+import { createBriefingJob, type BriefingJob } from "./jobs/briefing.js";
 import { createAuditRetention } from "./jobs/audit-retention.js";
 import { createTelegramBot } from "./channels/telegram/bot.js";
 import { createTelegramReminderDelivery } from "./channels/telegram/reminder-delivery.js";
+import { createTelegramBriefingDelivery } from "./channels/telegram/briefing-delivery.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -75,8 +82,9 @@ async function main(): Promise<void> {
     },
   };
 
+  const queue = createJobQueue(config.DATABASE_URL, logger);
   const jobs = createReminderJobs({
-    connectionString: config.DATABASE_URL,
+    boss: queue.boss,
     repo: remindersRepository,
     delivery,
     logger,
@@ -86,20 +94,48 @@ async function main(): Promise<void> {
   // Calendar is optional. Without it the assistant runs with everything else
   // and simply has no calendar tools, rather than failing to start: a missing
   // integration should not take the whole assistant down.
-  const calendarTools =
+  // Hoisted out of the tools because the briefing reads the calendar too, and
+  // it reads it by calling the service directly rather than through a tool.
+  const calendarService =
     config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE && config.GOOGLE_CALENDAR_ID
-      ? createCalendarTools(
-          createCalendarService(
-            createGoogleCalendar({
-              keyFile: config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
-              calendarId: config.GOOGLE_CALENDAR_ID,
-            }),
-          ),
-          config.TZ,
+      ? createCalendarService(
+          createGoogleCalendar({
+            keyFile: config.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
+            calendarId: config.GOOGLE_CALENDAR_ID,
+          }),
         )
-      : [];
-  if (calendarTools.length === 0) {
+      : undefined;
+  const calendarTools = calendarService ? createCalendarTools(calendarService, config.TZ) : [];
+  if (!calendarService) {
     logger.warn("calendar.disabled", { reason: "GOOGLE_* not configured" });
+  }
+
+  // The briefing closes the same cycle the reminders do — the job needs the
+  // service to collect the day, the service needs the job to reschedule itself
+  // when the time changes — and it is broken the same way, at the composition
+  // root, by resolving the job only once someone actually changes the time.
+  const briefingRepository = createBriefingRepository(database.db);
+  let briefingJob: BriefingJob | undefined = undefined;
+  const briefingScheduler: BriefingScheduler = {
+    async reschedule(sendAt) {
+      if (!briefingJob) throw new Error("The briefing job is not ready yet");
+      await briefingJob.scheduler.reschedule(sendAt);
+    },
+  };
+  const briefingEnabled = config.TELEGRAM_BRIEFING_CHAT_ID !== undefined;
+  const briefingService = createBriefingService({
+    repo: briefingRepository,
+    tasks: tasksService,
+    calendar: calendarService,
+    scheduler: briefingScheduler,
+    logger,
+    timeZone: config.TZ,
+  });
+  // Without a chat to write to there is no briefing, and a tool that reports a
+  // schedule nothing will act on would be a lie the model repeats confidently.
+  const briefingTools = briefingEnabled ? createBriefingTools(briefingService, config.TZ) : [];
+  if (!briefingEnabled) {
+    logger.warn("briefing.disabled", { reason: "TELEGRAM_BRIEFING_CHAT_ID not configured" });
   }
 
   const tools = createToolRegistry(
@@ -109,6 +145,7 @@ async function main(): Promise<void> {
       ...createTimeTools(timeService, config.TZ),
       ...createReminderTools(remindersService, config.TZ),
       ...calendarTools,
+      ...briefingTools,
     ],
     logger,
     audit,
@@ -134,10 +171,31 @@ async function main(): Promise<void> {
   });
   telegramDelivery = createTelegramReminderDelivery(bot);
 
+  if (config.TELEGRAM_BRIEFING_CHAT_ID) {
+    briefingJob = createBriefingJob({
+      boss: queue.boss,
+      repo: briefingRepository,
+      service: briefingService,
+      writer: createBriefingWriter({ provider, logger }),
+      delivery: createTelegramBriefingDelivery(bot),
+      chatId: config.TELEGRAM_BRIEFING_CHAT_ID,
+      timeZone: config.TZ,
+      logger,
+    });
+  }
+
   // Start the queue before reconciling it: anything that fell due while the
   // process was down goes out now, late rather than never.
+  await queue.start();
   await jobs.start();
   await jobs.recover();
+
+  if (briefingJob) {
+    // The environment seeds the schedule once; from here on the database holds
+    // it, so a time changed from the chat survives the next restart.
+    const settings = await briefingRepository.ensure(config.BRIEFING_TIME);
+    await briefingJob.start(settings.sendAt);
+  }
 
   const retention = createAuditRetention({
     repo: auditRepository,
@@ -170,7 +228,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info("shutdown", { signal });
     await bot.stop();
-    await jobs.stop();
+    await queue.stop();
     retention.stop();
     server.close();
     await database.close();

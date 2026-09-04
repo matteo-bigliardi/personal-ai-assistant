@@ -154,6 +154,18 @@ export function formatHuman(date: Date, timeZone: string): string {
   return `${p.weekdayLong} ${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
+/** The calendar date `date` falls on in `timeZone`, as `YYYY-MM-DD`. */
+export function formatCivilDate(date: Date, timeZone: string): string {
+  const p = zonedParts(date, timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+/** The wall-clock time `date` shows in `timeZone`, as `HH:MM`. */
+export function formatClock(date: Date, timeZone: string): string {
+  const p = zonedParts(date, timeZone);
+  return `${p.hour}:${p.minute}`;
+}
+
 /**
  * The calendar date `offsetDays` days after `date`, as seen in `timeZone`.
  * Civil-date arithmetic is done in UTC, where days are always 24h long, so a

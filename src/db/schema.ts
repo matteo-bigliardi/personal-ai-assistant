@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -203,6 +205,37 @@ export const auditEvents = pgTable(
   ],
 );
 
+/**
+ * Morning briefing: its schedule, and the marker that keeps it to one a day.
+ *
+ * Configuration lives in the database rather than in the environment because
+ * the user changes the time by asking, not by editing `.env` and restarting.
+ * `BRIEFING_TIME` seeds this row the first time and is ignored ever after.
+ *
+ * `last_sent_on` is not a log: it is the claim. A conditional update against
+ * today's local date is what makes a retried job a no-op instead of a second
+ * briefing, the same mechanism reminder delivery uses.
+ */
+export const briefingSettings = pgTable(
+  "briefing_settings",
+  {
+    // One row, forever: a constant primary key plus a CHECK that forbids the
+    // other value. Settings that can exist twice are settings that disagree.
+    id: boolean("id").primaryKey().default(true),
+    /** Wall-clock time in the configured timezone, `HH:MM`. */
+    sendAt: text("send_at").notNull(),
+    /** Local calendar date of the last briefing sent, `YYYY-MM-DD`. */
+    lastSentOn: date("last_sent_on"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("briefing_settings_single_row", sql`${t.id}`),
+    // A malformed time would fail at schedule time, hours later and far from
+    // whatever wrote it. The database is where it can never get in at all.
+    check("briefing_settings_send_at_format", sql`${t.sendAt} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
+  ],
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
@@ -213,3 +246,4 @@ export type Reminder = typeof reminders.$inferSelect;
 export type NewReminder = typeof reminders.$inferInsert;
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NewAuditEvent = typeof auditEvents.$inferInsert;
+export type BriefingSettings = typeof briefingSettings.$inferSelect;

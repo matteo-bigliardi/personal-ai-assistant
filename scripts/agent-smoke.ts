@@ -33,6 +33,7 @@ import { createRemindersService } from "../src/domain/reminders/service.js";
 import { createCalendarService } from "../src/domain/calendar/service.js";
 import { createGoogleCalendar } from "../src/integrations/google-calendar/client.js";
 import { createReminderJobs } from "../src/jobs/reminders.js";
+import { createJobQueue } from "../src/jobs/queue.js";
 import { createAuditRepository } from "../src/db/repositories/audit.js";
 import { createAuditSink } from "../src/observability/audit.js";
 
@@ -58,8 +59,9 @@ const timeService = createTimeService(
 );
 // Reminders are scheduled for real, but delivered to the console instead of
 // Telegram: this script exists to exercise the tools, not to message anyone.
+const queue = createJobQueue(config.DATABASE_URL, logger);
 const jobs = createReminderJobs({
-  connectionString: config.DATABASE_URL,
+  boss: queue.boss,
   repo: createRemindersRepository(database.db),
   logger,
   delivery: {
@@ -110,6 +112,7 @@ const agent = createAgent({
   audit,
 });
 
+await queue.start();
 await jobs.start();
 
 try {
@@ -118,6 +121,6 @@ try {
     console.log(`< ${await agent.handleMessage({ chatId: "smoke", text })}`);
   }
 } finally {
-  await jobs.stop();
+  await queue.stop();
   await database.close();
 }

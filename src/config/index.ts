@@ -35,8 +35,24 @@ const schema = z
     // work, so it is kept on a window instead of forever.
     AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
 
+    // Seeds the briefing schedule the first time the app starts and is ignored
+    // ever after: the live value lives in the database, because the user
+    // changes it by asking rather than by editing a file and restarting.
+    BRIEFING_TIME: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "must be a 24-hour time, e.g. 07:30")
+      .default("07:30"),
+
     TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
     TELEGRAM_ALLOWED_USER_IDS: csvNumbers,
+    /**
+     * Where the morning briefing goes. Deliberately not the first entry of the
+     * allowlist: "who may talk to me" and "who I write to unprompted" are two
+     * different questions, and tying them would let the order of a CSV decide
+     * the second one. Without it the assistant runs, and simply never writes
+     * first.
+     */
+    TELEGRAM_BRIEFING_CHAT_ID: z.string().min(1).optional(),
 
     ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
     ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),

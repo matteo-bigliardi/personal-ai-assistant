@@ -4,6 +4,7 @@ import {
   type RemindersRepository,
 } from "../../src/db/repositories/reminders.js";
 import { createReminderJobs, REMINDER_QUEUE, type ReminderJobs } from "../../src/jobs/reminders.js";
+import { createJobQueue, type JobQueue } from "../../src/jobs/queue.js";
 import { createTestLogger } from "../helpers/logger.js";
 import { setupTestDb, testDatabaseUrl } from "./helpers/db.js";
 
@@ -29,12 +30,14 @@ const CHAT = "chat-1";
 describeDb("reminder delivery", () => {
   let repo: RemindersRepository;
   let delivered: { chatId: string; reminderId: string; message: string }[];
-  const running: ReminderJobs[] = [];
+  const running: JobQueue[] = [];
 
-  /** A fresh set of jobs over the same database — a restarted process. */
+  /** A fresh queue and jobs over the same database — a restarted process. */
   function bootJobs(options: { failDelivery?: boolean; now?: Date } = {}): ReminderJobs {
+    const queue = createJobQueue(url as string, createTestLogger());
+    running.push(queue);
     const jobs = createReminderJobs({
-      connectionString: url as string,
+      boss: queue.boss,
       repo,
       logger: createTestLogger(),
       now: () => options.now ?? NOW,
@@ -45,8 +48,14 @@ describeDb("reminder delivery", () => {
         },
       },
     });
-    running.push(jobs);
-    return jobs;
+    // The queue must be running before a job registers a worker on it.
+    return {
+      ...jobs,
+      start: async () => {
+        await queue.start();
+        await jobs.start();
+      },
+    };
   }
 
   beforeEach(async () => {
@@ -56,7 +65,7 @@ describeDb("reminder delivery", () => {
   });
 
   afterAll(async () => {
-    for (const jobs of running) await jobs.stop();
+    for (const queue of running) await queue.stop();
     await testDb?.close();
   });
 
