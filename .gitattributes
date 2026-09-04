@@ -1,0 +1,12 @@
+# Source files stay LF whatever the checkout platform. Windows editors and
+# tooling will otherwise flip a file to CRLF on the first write and turn a
+# three-line change into a whole-file diff.
+#
+# package.json and package-lock.json are deliberately left out: npm rewrites
+# them with CRLF here, and normalising them would mean re-writing the lockfile
+# for no benefit.
+*.ts text eol=lf
+*.md text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
