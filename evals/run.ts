@@ -152,7 +152,8 @@ function checkStep(step: Step, observed: Observation[], reply: string): StepResu
     for (const [name, expected] of Object.entries(expect.args)) {
       argsChecked++;
       if (argMatches(expected, input[name])) argsCorrect++;
-      else failures.push(`${name}: expected ${String(expected)}, got ${JSON.stringify(input[name])}`);
+      else
+        failures.push(`${name}: expected ${String(expected)}, got ${JSON.stringify(input[name])}`);
     }
   }
   if (match && expect.argsAbsent) {
@@ -195,9 +196,7 @@ async function main(): Promise<void> {
   const logger = createLogger("error");
   const services = fakeServices();
 
-  const cases = JSON.parse(
-    readFileSync(resolve(HERE, "cases/v1.json"), "utf8"),
-  ) as EvalCase[];
+  const cases = JSON.parse(readFileSync(resolve(HERE, "cases/v1.json"), "utf8")) as EvalCase[];
   const selected = only ? cases.filter((c) => c.id === only) : cases;
   if (selected.length === 0) {
     console.error(`No case matches "${only ?? ""}".`);
@@ -251,7 +250,10 @@ async function main(): Promise<void> {
     const everything: Observation[] = [];
     for (const step of testCase.steps) {
       observed = [];
-      const reply = await agent.handleMessage({ chatId: `eval-${testCase.id}`, text: step.message });
+      const reply = await agent.handleMessage({
+        chatId: `eval-${testCase.id}`,
+        text: step.message,
+      });
       everything.push(...observed);
       steps.push(checkStep(step, observed, reply));
     }
@@ -293,8 +295,12 @@ async function main(): Promise<void> {
 
   console.log("");
   console.log(`model                    ${summary.model}`);
-  console.log(`tool-selection accuracy  ${pct(summary.toolSelectionAccuracy)} (${toolSteps.length} steps)`);
-  console.log(`argument correctness     ${pct(summary.argumentCorrectness)} (${argsChecked} arguments)`);
+  console.log(
+    `tool-selection accuracy  ${pct(summary.toolSelectionAccuracy)} (${toolSteps.length} steps)`,
+  );
+  console.log(
+    `argument correctness     ${pct(summary.argumentCorrectness)} (${argsChecked} arguments)`,
+  );
   console.log(`task success rate        ${pct(summary.taskSuccessRate)} (${results.length} cases)`);
 
   // Results carry synthetic data only, but they are still a model's output on a

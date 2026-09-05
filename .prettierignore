@@ -1,0 +1,9 @@
+# Generated files, owned by the tool that writes them. Formatting them means
+# fighting that tool on every install or migration.
+package.json
+package-lock.json
+drizzle/
+evals/results/
+
+dist/
+coverage/

@@ -186,7 +186,11 @@ export function fakeServices(): {
       async complete(ref) {
         const task = taskByRef(ref);
         return {
-          task: { ...task, status: "done" as Task["status"], completedAt: AT("2026-09-09T08:00:00Z") },
+          task: {
+            ...task,
+            status: "done" as Task["status"],
+            completedAt: AT("2026-09-09T08:00:00Z"),
+          },
           alreadyDone: false,
         };
       },

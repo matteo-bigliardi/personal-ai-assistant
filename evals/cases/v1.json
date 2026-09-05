@@ -93,9 +93,7 @@
         "message": "aggiungi un task: sistemare il backup, presto",
         "expect": {
           "tool": "create_task",
-          "argsAbsent": [
-            "due_at"
-          ]
+          "argsAbsent": ["due_at"]
         }
       }
     ]

@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { defineTool, type ToolDefinition } from "../tool-registry.js";
-import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
-  type TasksService,
-} from "../../domain/tasks/service.js";
+import { TASK_PRIORITIES, TASK_STATUSES, type TasksService } from "../../domain/tasks/service.js";
 import { REF_LENGTH, shortRef } from "../../domain/reference.js";
 import type { TaskWithProject } from "../../db/repositories/tasks.js";
 import { DUE_FORMAT_HINT, formatInstant, parseDueAt } from "../../domain/datetime.js";

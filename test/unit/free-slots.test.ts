@@ -118,9 +118,9 @@ describe("findFreeSlots", () => {
   });
 
   it("rejects a nonsensical minimum", () => {
-    expect(() =>
-      findFreeSlots({ window: WINDOW, busy: [], minimumMinutes: 0, limit: 5 }),
-    ).toThrow(InvalidInputError);
+    expect(() => findFreeSlots({ window: WINDOW, busy: [], minimumMinutes: 0, limit: 5 })).toThrow(
+      InvalidInputError,
+    );
     expect(() =>
       findFreeSlots({ window: WINDOW, busy: [], minimumMinutes: 1.5, limit: 5 }),
     ).toThrow(/whole number/);
