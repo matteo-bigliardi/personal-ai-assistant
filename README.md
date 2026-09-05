@@ -320,6 +320,51 @@ anything that looks like a secret, and Google credentials are a service-account
 key file kept out of the repository. Deletions cannot happen without an explicit
 confirmation in a separate message.
 
+## Limitations
+
+Known and deliberate, so nobody has to discover them the hard way.
+
+**Built for one person.** The allowlist, the briefing recipient and the single
+running timer all assume one user. Nothing would stop a second person from being
+allowlisted, but they would share the same projects, tasks and timer.
+
+**The calendar cannot invite anyone.** Authentication is a service account, which
+is a separate identity from the user. It manages the calendar shared with it, but
+an event it creates cannot invite other people. It also works on exactly one
+calendar.
+
+**Recurring anything is out.** The assistant can move or delete a single
+occurrence of an existing recurring event, but it cannot create a recurring
+event or a recurring reminder.
+
+**Conversation memory is in-process.** Short history and pending confirmations
+live in memory and are lost on restart. The cost is small — a repeated sentence,
+or being asked to confirm again — and the database, which is the real memory, is
+untouched. But it does mean the assistant cannot run as more than one process.
+
+**No semantic memory.** The assistant knows what is in the database. It does not
+remember what you told it last week, and asking "what did we decide about X"
+will not work unless X was written down as a task or a project.
+
+**Projects have no deadline.** Dates live on tasks. The morning briefing reports
+tasks that are due or overdue along with the project each belongs to, which
+covers the same ground in practice.
+
+**Every message costs two or three model round trips.** The system prompt and
+tool definitions are a cached prefix, which keeps the bill down, but a chatty day
+is a real cost. The audit trail records the token counters if you want to check.
+
+**Without the model, the assistant is mute.** Reminders still arrive on time and
+the morning briefing still goes out as plain text, because neither needs the LLM
+at delivery. Everything conversational stops.
+
+**The audit trail cannot be replayed.** It records which tool ran and how it
+went, and the names, types and sizes of the arguments — never their values. That
+is a privacy decision, and it means the trail can tell you the model picked the
+wrong tool but not what you had asked for.
+
+**Telegram only, long polling only.** No web UI, no webhook, no other channel.
+
 ## License
 
 [MIT](./LICENSE)
