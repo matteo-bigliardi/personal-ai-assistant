@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Personal AI assistant over Telegram: projects, tasks, time tracking, reminders and Google Calendar.",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "overrides": {
     "esbuild": "^0.28.2"
@@ -17,10 +17,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
     "eval": "tsx --env-file-if-exists=.env evals/run.ts"
   },
   "dependencies": {
