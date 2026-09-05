@@ -1,0 +1,403 @@
+[
+  {
+    "id": "task-create-plain",
+    "area": "tasks",
+    "steps": [
+      {
+        "message": "aggiungi un task: rinnovare il dominio",
+        "expect": {
+          "tool": "create_task",
+          "args": {
+            "title": "~rinnovare il dominio"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "task-create-with-project-and-weekday",
+    "area": "tasks",
+    "note": "Friday must be resolved from the context block, not from arithmetic.",
+    "steps": [
+      {
+        "message": "aggiungi \"preparare la demo\" ad Atlas per venerdì",
+        "expect": {
+          "tool": "create_task",
+          "args": {
+            "title": "~preparare la demo",
+            "project": "Atlas",
+            "due_at": "2026-09-11"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "task-list-open",
+    "area": "tasks",
+    "steps": [
+      {
+        "message": "quali task sono aperti su Atlas?",
+        "expect": {
+          "tool": "list_tasks",
+          "args": {
+            "project": "Atlas"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "task-complete-by-reference",
+    "area": "tasks",
+    "note": "Two turns: the model must list to get the id, then complete it.",
+    "steps": [
+      {
+        "message": "cosa devo fare oggi?",
+        "expect": {
+          "tool": "list_tasks"
+        }
+      },
+      {
+        "message": "segna come fatto quello della demo",
+        "expect": {
+          "tool": "complete_task",
+          "args": {
+            "task_id": "a1b2c3d4"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "task-due-tomorrow",
+    "area": "dates",
+    "steps": [
+      {
+        "message": "ricordami come task di chiamare il commercialista domani",
+        "expect": {
+          "tool": "create_task",
+          "args": {
+            "due_at": "2026-09-10"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "task-ambiguous-date-asks",
+    "area": "dates",
+    "note": "\"presto\" is not a date. Creating the task is fine; inventing a deadline is the failure.",
+    "steps": [
+      {
+        "message": "aggiungi un task: sistemare il backup, presto",
+        "expect": {
+          "tool": "create_task",
+          "argsAbsent": [
+            "due_at"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "timer-start",
+    "area": "time",
+    "steps": [
+      {
+        "message": "inizio a lavorare su Atlas",
+        "expect": {
+          "tool": "start_timer",
+          "args": {
+            "project": "Atlas"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "timer-stop",
+    "area": "time",
+    "steps": [
+      {
+        "message": "fermo il timer",
+        "expect": {
+          "tool": "stop_timer"
+        }
+      }
+    ]
+  },
+  {
+    "id": "time-report-week",
+    "area": "time",
+    "steps": [
+      {
+        "message": "quanto tempo ho speso su Atlas questa settimana?",
+        "expect": {
+          "tool": "get_time_spent",
+          "args": {
+            "project": "Atlas",
+            "period": "this_week"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "reminder-create-relative",
+    "area": "reminders",
+    "note": "A duration has its own numeric argument; the model must not compute an instant.",
+    "steps": [
+      {
+        "message": "ricordami di controllare la build fra 45 minuti",
+        "expect": {
+          "tool": "create_reminder",
+          "args": {
+            "in_minutes": 45
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "reminder-snooze",
+    "area": "reminders",
+    "steps": [
+      {
+        "message": "che reminder ho?",
+        "expect": {
+          "tool": "list_reminders"
+        }
+      },
+      {
+        "message": "rimanda di 20 minuti quello della build",
+        "expect": {
+          "tool": "snooze_reminder",
+          "args": {
+            "minutes": 20
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "reminder-cancel",
+    "area": "reminders",
+    "steps": [
+      {
+        "message": "che reminder ho?",
+        "expect": {
+          "tool": "list_reminders"
+        }
+      },
+      {
+        "message": "annulla quello della banca",
+        "expect": {
+          "tool": "cancel_reminder",
+          "args": {
+            "reminder_id": "b0b1b2b3"
+          }
+        }
+      }
+    ],
+    "note": "Only a reminder that has not fired can be cancelled; the fixture has one."
+  },
+  {
+    "id": "calendar-list-today",
+    "area": "calendar",
+    "steps": [
+      {
+        "message": "cosa ho in agenda oggi?",
+        "expect": {
+          "tool": "list_calendar_events",
+          "args": {
+            "from": "2026-09-09"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "calendar-list-tomorrow",
+    "area": "calendar",
+    "steps": [
+      {
+        "message": "e domani?",
+        "expect": {
+          "tool": "list_calendar_events",
+          "args": {
+            "from": "2026-09-10"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "calendar-create",
+    "area": "calendar",
+    "note": "15:00-15:30 local is 13:00-13:30 UTC in September. A timezone slip shows here.",
+    "steps": [
+      {
+        "message": "metti una riunione venerdì dalle 15:00 alle 15:30",
+        "expect": {
+          "tool": "create_calendar_event",
+          "args": {
+            "start": "2026-09-11T13:00:00Z",
+            "end": "2026-09-11T13:30:00Z"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "calendar-move",
+    "area": "calendar",
+    "note": "Moving must preserve the duration, so both ends have to be sent. The model sometimes moves straight away and sometimes offers a confirmation first, so the case asserts the outcome over the whole conversation rather than the route. It does not count the calls: a redundant confirmation makes the model move again, which is harmless and not what is being measured.",
+    "steps": [
+      {
+        "message": "cosa ho oggi?",
+        "expect": {
+          "tool": "list_calendar_events"
+        }
+      },
+      {
+        "message": "sposta la design review alle 17"
+      },
+      {
+        "message": "sì"
+      }
+    ],
+    "expectFinal": {
+      "tool": "update_calendar_event",
+      "args": {
+        "event_id": "evt-review",
+        "start": "2026-09-09T15:00:00Z",
+        "end": "2026-09-09T16:00:00Z"
+      }
+    }
+  },
+  {
+    "id": "calendar-free-slots",
+    "area": "calendar",
+    "steps": [
+      {
+        "message": "trovami due ore libere domani pomeriggio",
+        "expect": {
+          "tool": "find_free_slots",
+          "args": {
+            "minimum_minutes": 120
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "calendar-delete-asks-first",
+    "area": "confirmation",
+    "note": "What matters is that nothing was deleted, whether the model asked before trying or was refused.",
+    "steps": [
+      {
+        "message": "cosa ho oggi?",
+        "expect": {
+          "tool": "list_calendar_events"
+        }
+      },
+      {
+        "message": "cancella la design review",
+        "expect": {
+          "ran": {
+            "delete_calendar_event": 0
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "calendar-delete-after-yes",
+    "area": "confirmation",
+    "steps": [
+      {
+        "message": "cosa ho oggi?",
+        "expect": {
+          "tool": "list_calendar_events"
+        }
+      },
+      {
+        "message": "cancella la design review",
+        "expect": {
+          "ran": {
+            "delete_calendar_event": 0
+          }
+        }
+      },
+      {
+        "message": "sì, conferma",
+        "expect": {
+          "tool": "delete_calendar_event",
+          "ran": {
+            "delete_calendar_event": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "project-archive-asks-first",
+    "area": "confirmation",
+    "steps": [
+      {
+        "message": "archivia il progetto Borealis",
+        "expect": {
+          "tool": "update_project",
+          "refused": "confirmation_required",
+          "ran": {
+            "update_project": 0
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "project-create",
+    "area": "projects",
+    "steps": [
+      {
+        "message": "crea il progetto Cassini",
+        "expect": {
+          "tool": "create_project",
+          "args": {
+            "name": "Cassini"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "briefing-time-change",
+    "area": "briefing",
+    "steps": [
+      {
+        "message": "mandami il briefing alle 8:05",
+        "expect": {
+          "tool": "set_briefing_time",
+          "args": {
+            "time": "08:05"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "unknown-capability-is-declined",
+    "area": "boundaries",
+    "note": "No tool covers this. Saying it plainly beats pretending, and beats calling something unrelated.",
+    "steps": [
+      {
+        "message": "mandami una mail con il riepilogo",
+        "expect": {
+          "noTool": true
+        }
+      }
+    ]
+  }
+]

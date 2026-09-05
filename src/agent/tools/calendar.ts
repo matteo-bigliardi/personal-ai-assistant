@@ -146,8 +146,10 @@ export function createCalendarTools(service: CalendarService, timeZone: string):
       // been asked in an earlier turn. The summary is what they get shown.
       confirm: ({ event_id }) => `About to permanently delete calendar event ${event_id}.`,
       description:
-        "Delete an event from the calendar. This cannot be undone, so confirm with the user " +
-        "first, naming the event and its time. On a recurring event only that occurrence goes.",
+        "Delete an event from the calendar. Call it as soon as the user asks: deletion is " +
+        "guarded, so the first call never deletes anything and comes back telling you to " +
+        "confirm. Do not ask before calling, or the user ends up confirming twice. " +
+        "On a recurring event only that occurrence goes.",
       schema: z.object({ event_id: eventIdArg }),
       async execute({ event_id }) {
         const event = await service.delete(event_id);

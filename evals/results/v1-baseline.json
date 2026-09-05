@@ -1,0 +1,575 @@
+{
+  "summary": {
+    "model": "claude-sonnet-5",
+    "ranAt": "2026-09-05T09:39:00.723Z",
+    "cases": 23,
+    "toolSelectionAccuracy": 1,
+    "argumentCorrectness": 1,
+    "taskSuccessRate": 1
+  },
+  "results": [
+    {
+      "id": "task-create-plain",
+      "area": "tasks",
+      "passed": true,
+      "steps": [
+        {
+          "message": "aggiungi un task: rinnovare il dominio",
+          "reply": "Fatto! Ho aggiunto il task \"Rinnovare il dominio\". Vuoi impostare una scadenza o assegnarlo a un progetto?",
+          "toolsCalled": [
+            "create_task"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "task-create-with-project-and-weekday",
+      "area": "tasks",
+      "passed": true,
+      "steps": [
+        {
+          "message": "aggiungi \"preparare la demo\" ad Atlas per venerdì",
+          "reply": "Fatto: \"preparare la demo\" aggiunto ad Atlas, scadenza venerdì 11/09.",
+          "toolsCalled": [
+            "get_project",
+            "create_task"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 3,
+          "argsCorrect": 3,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "task-list-open",
+      "area": "tasks",
+      "passed": true,
+      "steps": [
+        {
+          "message": "quali task sono aperti su Atlas?",
+          "reply": "Su Atlas ci sono 2 task aperti:\n\n1. **prepare the demo** — priorità alta, scadenza ven 11/09/2026\n2. **renew the domain** — scadenza gio 04/09/2026 (in ritardo!)",
+          "toolsCalled": [
+            "list_tasks"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "task-complete-by-reference",
+      "area": "tasks",
+      "passed": true,
+      "steps": [
+        {
+          "message": "cosa devo fare oggi?",
+          "reply": "Ecco la situazione di oggi (mercoledì 9 settembre):\n\n**Calendario**\n- 09:00–09:15 standup\n- 16:00–17:00 design review\n\n**Task**\n- ⚠️ \"renew the domain\" – era in scadenza il 4/9, quindi è già in ritardo\n- \"prepare the demo\" (progetto Atlas, priorità alta) – in scadenza venerdì 11/9, da tenere d'occhio\n\nVuoi che segni \"renew the domain\" come fatta o che la rimandi?",
+          "toolsCalled": [
+            "list_tasks",
+            "list_calendar_events"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "segna come fatto quello della demo",
+          "reply": "Fatto! \"Prepare the demo\" segnato come completato ✅\n\nRimane ancora aperto \"renew the domain\", in ritardo dal 4/9. Vuoi gestirlo?",
+          "toolsCalled": [
+            "list_tasks",
+            "complete_task"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "task-due-tomorrow",
+      "area": "dates",
+      "passed": true,
+      "steps": [
+        {
+          "message": "ricordami come task di chiamare il commercialista domani",
+          "reply": "Fatto! Ho creato il task \"Chiamare il commercialista\" con scadenza domani, giovedì 10 settembre.",
+          "toolsCalled": [
+            "create_task"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "task-ambiguous-date-asks",
+      "area": "dates",
+      "passed": true,
+      "steps": [
+        {
+          "message": "aggiungi un task: sistemare il backup, presto",
+          "reply": "Fatto! Ho aggiunto il task \"Sistemare il backup\" con priorità alta (visto il \"presto\"). Vuoi anche assegnargli una scadenza o un progetto?",
+          "toolsCalled": [
+            "create_task"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "timer-start",
+      "area": "time",
+      "passed": true,
+      "steps": [
+        {
+          "message": "inizio a lavorare su Atlas",
+          "reply": "Timer avviato su Atlas 👍",
+          "toolsCalled": [
+            "start_timer"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "timer-stop",
+      "area": "time",
+      "passed": true,
+      "steps": [
+        {
+          "message": "fermo il timer",
+          "reply": "Timer fermato: progetto Atlas, durata 1h 30m.",
+          "toolsCalled": [
+            "stop_timer"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "time-report-week",
+      "area": "time",
+      "passed": true,
+      "steps": [
+        {
+          "message": "quanto tempo ho speso su Atlas questa settimana?",
+          "reply": "Questa settimana hai speso 2 ore su Atlas.",
+          "toolsCalled": [
+            "get_time_spent"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 2,
+          "argsCorrect": 2,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "reminder-create-relative",
+      "area": "reminders",
+      "passed": true,
+      "steps": [
+        {
+          "message": "ricordami di controllare la build fra 45 minuti",
+          "reply": "Fatto! Ti ricorderò di controllare la build alle 08:45.",
+          "toolsCalled": [
+            "create_reminder"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "reminder-snooze",
+      "area": "reminders",
+      "passed": true,
+      "steps": [
+        {
+          "message": "che reminder ho?",
+          "reply": "Hai questi promemoria:\n\n1. \"call the bank\" — oggi alle 18:00 (in attesa)\n2. \"check the build\" — previsto per le 16:00, risulta già inviato",
+          "toolsCalled": [
+            "list_reminders"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "rimanda di 20 minuti quello della build",
+          "reply": "Fatto, \"check the build\" rimandato alle 16:20.",
+          "toolsCalled": [
+            "list_reminders",
+            "snooze_reminder"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "reminder-cancel",
+      "area": "reminders",
+      "passed": true,
+      "steps": [
+        {
+          "message": "che reminder ho?",
+          "reply": "Hai questi promemoria in programma:\n\n- \"call the bank\" – oggi alle 18:00\n- \"check the build\" – era per le 16:00 di oggi, risulta già consegnato\n\nVuoi che faccia qualcosa su uno di questi?",
+          "toolsCalled": [
+            "list_reminders"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "annulla quello della banca",
+          "reply": "Fatto, ho annullato il promemoria \"call the bank\" delle 18:00.",
+          "toolsCalled": [
+            "list_reminders",
+            "cancel_reminder"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-list-today",
+      "area": "calendar",
+      "passed": true,
+      "steps": [
+        {
+          "message": "cosa ho in agenda oggi?",
+          "reply": "Oggi hai:\n- 9:00–9:15 standup\n- 16:00–17:00 design review",
+          "toolsCalled": [
+            "list_calendar_events"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-list-tomorrow",
+      "area": "calendar",
+      "passed": true,
+      "steps": [
+        {
+          "message": "e domani?",
+          "reply": "Domani (10/9) risultano questi eventi:\n- 09:00–09:15 standup\n- 16:00–17:00 design review",
+          "toolsCalled": [
+            "list_calendar_events"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-create",
+      "area": "calendar",
+      "passed": true,
+      "steps": [
+        {
+          "message": "metti una riunione venerdì dalle 15:00 alle 15:30",
+          "reply": "Fatto: riunione fissata per venerdì 11 settembre dalle 15:00 alle 15:30.",
+          "toolsCalled": [
+            "create_calendar_event"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 2,
+          "argsCorrect": 2,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-move",
+      "area": "calendar",
+      "passed": true,
+      "steps": [
+        {
+          "message": "cosa ho oggi?",
+          "reply": "Ecco cosa hai oggi, mercoledì 9 settembre:\n\n📅 Calendario\n- 09:00–09:15 standup\n- 16:00–17:00 design review\n\n✅ Task\n- ⚠️ \"rinnovare il dominio\" era in scadenza il 4/9 — ora in ritardo\n- \"preparare la demo\" (Atlas, alta priorità) scade venerdì 11/9, non oggi ma tienila d'occhio\n\nVuoi che ti ricordi qualcosa in particolare?",
+          "toolsCalled": [
+            "list_calendar_events",
+            "list_tasks"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "sposta la design review alle 17",
+          "reply": "Fatto: la design review è ora alle 17:00–18:00.",
+          "toolsCalled": [
+            "list_calendar_events",
+            "update_calendar_event"
+          ],
+          "toolCorrect": null,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "sì",
+          "reply": "Fatto: la design review è ora spostata alle 17:00–18:00.",
+          "toolsCalled": [
+            "list_calendar_events",
+            "update_calendar_event"
+          ],
+          "toolCorrect": null,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "(whole case)",
+          "reply": "",
+          "toolsCalled": [
+            "list_calendar_events",
+            "list_tasks",
+            "list_calendar_events",
+            "update_calendar_event",
+            "list_calendar_events",
+            "update_calendar_event"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 3,
+          "argsCorrect": 3,
+          "failures": [],
+          "passed": true
+        }
+      ],
+      "finalFailures": []
+    },
+    {
+      "id": "calendar-free-slots",
+      "area": "calendar",
+      "passed": true,
+      "steps": [
+        {
+          "message": "trovami due ore libere domani pomeriggio",
+          "reply": "Domani pomeriggio (giovedì 10/9) sei completamente libero dalle 12:00 alle 19:00, quindi puoi scegliere tu quando incastrare le due ore.",
+          "toolsCalled": [
+            "find_free_slots"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-delete-asks-first",
+      "area": "confirmation",
+      "passed": true,
+      "steps": [
+        {
+          "message": "cosa ho oggi?",
+          "reply": "Oggi hai:\n\n📅 Calendario:\n- 09:00–09:15 standup\n- 16:00–17:00 design review\n\n✅ Task in ritardo: \"renew the domain\" (scadenza 4 settembre, ancora aperta)\n\nNessun altro task scade oggi.",
+          "toolsCalled": [
+            "list_calendar_events",
+            "list_tasks"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "cancella la design review",
+          "reply": "Sto per eliminare l'evento \"design review\" di oggi dalle 16:00 alle 17:00. Confermi?",
+          "toolsCalled": [
+            "list_calendar_events",
+            "delete_calendar_event"
+          ],
+          "toolCorrect": null,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "calendar-delete-after-yes",
+      "area": "confirmation",
+      "passed": true,
+      "steps": [
+        {
+          "message": "cosa ho oggi?",
+          "reply": "Oggi hai:\n\n📅 Calendario:\n- 09:00–09:15 standup\n- 16:00–17:00 design review\n\n✅ Attività:\n- \"rinnovare il dominio\" è scaduta (era dovuta il 4/9) e ancora aperta — da sistemare!\n\n(C'è anche \"preparare la demo\" ma è dovuta venerdì 11/9, non oggi.)",
+          "toolsCalled": [
+            "list_calendar_events",
+            "list_tasks"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "cancella la design review",
+          "reply": "Sto per eliminare l'evento \"design review\" di oggi (16:00–17:00). Confermi?",
+          "toolsCalled": [
+            "list_calendar_events",
+            "delete_calendar_event"
+          ],
+          "toolCorrect": null,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        },
+        {
+          "message": "sì, conferma",
+          "reply": "Fatto, ho eliminato \"design review\" delle 16:00–17:00 di oggi.",
+          "toolsCalled": [
+            "list_calendar_events",
+            "delete_calendar_event"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "project-archive-asks-first",
+      "area": "confirmation",
+      "passed": true,
+      "steps": [
+        {
+          "message": "archivia il progetto Borealis",
+          "reply": "Sto per archiviare il progetto \"Borealis\": verrà nascosto insieme ai suoi task da tutti gli elenchi. Confermi?",
+          "toolsCalled": [
+            "get_project",
+            "update_project"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "project-create",
+      "area": "projects",
+      "passed": true,
+      "steps": [
+        {
+          "message": "crea il progetto Cassini",
+          "reply": "Fatto! Ho creato il progetto \"Cassini\" (stato: attivo).",
+          "toolsCalled": [
+            "create_project"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "briefing-time-change",
+      "area": "briefing",
+      "passed": true,
+      "steps": [
+        {
+          "message": "mandami il briefing alle 8:05",
+          "reply": "Fatto, da domani il briefing arriverà alle 8:05.",
+          "toolsCalled": [
+            "set_briefing_time"
+          ],
+          "toolCorrect": true,
+          "argsChecked": 1,
+          "argsCorrect": 1,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "unknown-capability-is-declined",
+      "area": "boundaries",
+      "passed": true,
+      "steps": [
+        {
+          "message": "mandami una mail con il riepilogo",
+          "reply": "Ciao! Purtroppo non ho a disposizione uno strumento per inviare email — posso gestire progetti, task, tempo tracciato, promemoria e calendario, ma non la posta elettronica.\n\nPosso però prepararti il riepilogo qui in chat, oppure impostarti un promemoria con il contenuto. Vuoi che faccia una di queste due cose? Dimmi anche di cosa vorresti il riepilogo (progetti, task, tempo lavorato, agenda...).",
+          "toolsCalled": [],
+          "toolCorrect": null,
+          "argsChecked": 0,
+          "argsCorrect": 0,
+          "failures": [],
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

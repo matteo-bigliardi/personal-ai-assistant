@@ -120,6 +120,7 @@ is unreachable.
 | `npm run lint`        | ESLint                                          |
 | `npm run db:generate` | Generate a migration from `src/db/schema.ts`    |
 | `npm run db:migrate`  | Apply pending migrations (also done at startup) |
+| `npm run eval`        | Run the agent eval suite against the real model |
 
 | Shell script            | Purpose                                           |
 | ----------------------- | ------------------------------------------------- |
@@ -242,6 +243,42 @@ whether the model picks the right tool and fills it in correctly, not enough to
 reconstruct a sentence anyone said. A failed audit write is logged and swallowed:
 it must never fail the action it describes. A daily sweep drops rows older than
 `AUDIT_RETENTION_DAYS`.
+
+## Evals
+
+`npm run eval` runs twenty-three synthetic conversations through the real agent
+loop, the real tool definitions and the real model, with the domain services
+replaced by fakes. Nothing is written anywhere: an eval run cannot reach the
+database, the calendar or anyone's data, and the clock is frozen to a fixed
+Wednesday so that "Friday" has exactly one right answer.
+
+Three numbers come out:
+
+| Metric                  | What it means                              |
+| ----------------------- | ------------------------------------------ |
+| tool-selection accuracy | the expected tool was the one called       |
+| argument correctness    | of the arguments checked, how many matched |
+| task success rate       | the case passed completely                 |
+
+The cases cover creating and completing tasks, timers, reminders, calendar
+reads, writes and moves, relative and ambiguous dates, the confirmation flow,
+and one request no tool covers — where the right answer is to say so. A run
+writes to `evals/results/local/`, which is git-ignored; `evals/results/v1-baseline.json`
+is a committed reference run.
+
+Two things the harness deliberately does not assert. Instants are compared as
+instants, so `15:00+02:00` and `13:00Z` are the same answer and a case cannot
+fail on formatting. And where the model may reasonably either act at once or
+offer a confirmation first — moving an appointment, for instance — the case
+checks the outcome across the whole conversation rather than pinning the route,
+because the route varies between runs.
+
+Writing the cases found two things worth keeping. `delete_calendar_event` used
+to tell the model to confirm before calling, which made the user confirm twice:
+once for the model's own question and once for the registry's refusal. And the
+first eval run failed a move because the _fake_ applied only the start of the
+patch — the model noticed the zero-length event it got back and kept retrying,
+which is the behaviour you would want against a real API misbehaving.
 
 ## Backups
 
