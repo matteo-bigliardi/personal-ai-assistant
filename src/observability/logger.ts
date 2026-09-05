@@ -7,6 +7,11 @@ type Level = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
+/**
+ * Matched as substrings of the lowercased key, not as whole keys: the names
+ * that actually turn up are `botToken`, `apiKey`, `TELEGRAM_BOT_TOKEN`, and an
+ * exact-match list quietly lets every one of them through.
+ */
 const REDACT_KEYS = [
   "token",
   "apikey",
@@ -14,7 +19,7 @@ const REDACT_KEYS = [
   "authorization",
   "password",
   "secret",
-  "client_secret",
+  "credential",
 ];
 
 function redact(value: unknown): unknown {
@@ -22,7 +27,8 @@ function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    if (REDACT_KEYS.includes(k.toLowerCase())) out[k] = "[REDACTED]";
+    const key = k.toLowerCase();
+    if (REDACT_KEYS.some((needle) => key.includes(needle))) out[k] = "[REDACTED]";
     else out[k] = redact(v);
   }
   return out;

@@ -7,14 +7,15 @@ and not the scheduler.
 
 ## Status
 
-**In progress.** Projects, tasks, time tracking, persistent reminders and Google
-Calendar are implemented end to end — the agent loop, the typed tool boundary and
-all twenty-one tools work over Telegram. A morning briefing and confirmation for
-destructive actions are next.
+**In progress.** Projects, tasks, time tracking, persistent reminders, Google
+Calendar, a morning briefing and an audit trail are implemented end to end — the
+agent loop, the typed tool boundary and all twenty-three tools work over
+Telegram, and destructive actions cannot run until the user has confirmed them.
+What remains before V1 is a synthetic eval set and a round of real use.
 
 ## Stack
 
-TypeScript · Node 22+ · grammY (Telegram) · Hono (health) · PostgreSQL + Drizzle ·
+TypeScript · Node 24 · grammY (Telegram) · Hono (health) · PostgreSQL + Drizzle ·
 pg-boss (jobs) · Anthropic SDK · Vitest · Docker Compose.
 
 ## Architecture (V1)
@@ -26,7 +27,10 @@ Telegram → Telegram Adapter → Agent Service ── LLM Provider
                               ├─ Projects / Tasks ─ PostgreSQL
                               ├─ Time Tracking ──── PostgreSQL
                               ├─ Reminders ──────── PostgreSQL + pg-boss
-                              └─ Calendar ───────── Google Calendar API
+                              ├─ Calendar ───────── Google Calendar API
+                              └─ Briefing ───────── PostgreSQL + pg-boss
+
+pg-boss workers → reminder delivery · morning briefing
 ```
 
 Design invariants:
@@ -38,8 +42,13 @@ Design invariants:
   to the model.
 - **The scheduler is deterministic.** Reminder delivery runs without an LLM call,
   so it cannot fail on a model error or a rate limit.
-- **Destructive actions require confirmation.** Reads and low-risk writes execute
-  directly; deletions and bulk changes ask first.
+- **Destructive actions require confirmation**, and the rule is enforced rather
+  than requested. The tool registry refuses the first attempt at a destructive
+  call outright and records what was asked for; only the identical call made
+  while handling a _later_ message runs. The assistant therefore has to end its
+  turn — which means saying something — and the user has to answer, before
+  anything is deleted. There is no token for the model to carry: the pending
+  request lives server-side, out of reach of the conversation.
 - **The agent owns the loop, not the provider.** A provider performs exactly one
   round trip and never executes anything: it reports which tools the model asked
   for and returns. Validation, execution and every side effect stay in the
@@ -72,7 +81,7 @@ traffic is discarded once a turn ends.
 
 ## Local development
 
-Prerequisites: Node 22+, Docker.
+Prerequisites: Node 24, Docker.
 
 ```bash
 cp .env.example .env
@@ -112,6 +121,11 @@ is unreachable.
 | `npm run db:generate` | Generate a migration from `src/db/schema.ts`    |
 | `npm run db:migrate`  | Apply pending migrations (also done at startup) |
 
+| Shell script            | Purpose                                           |
+| ----------------------- | ------------------------------------------------- |
+| `scripts/backup-db.sh`  | Dump the database, verifying the dump is readable |
+| `scripts/restore-db.sh` | Restore a dump, into a scratch database if asked  |
+
 Integration tests need Postgres. They never touch `DATABASE_URL` itself: the URL
 is redirected to a sibling database suffixed `_test`, created on demand, so
 running the suite cannot destroy real data. With no server reachable they skip
@@ -122,6 +136,14 @@ tools) without Telegram, which is handy when adding a tool:
 
 ```bash
 npx tsx --env-file-if-exists=.env scripts/agent-smoke.ts "create project Atlas"
+```
+
+`scripts/briefing-smoke.ts` composes and prints today's briefing immediately,
+rather than waiting for the scheduled hour. It bypasses the once-a-day claim, so
+it never consumes the real morning briefing:
+
+```bash
+npx tsx --env-file-if-exists=.env scripts/briefing-smoke.ts
 ```
 
 ## Data model
@@ -193,12 +215,73 @@ default `now()` is the transaction start time on the database host, which is a
 different machine under Docker, and mixing the two can place an `updated_at`
 before its own `created_at`.
 
+The morning briefing is the one place the model is used without tools and
+without a loop. Today's events and the tasks that are due are collected
+deterministically by calling the domain services, and the model is handed that
+data with a single job: turn it into a few lines. It cannot forget to look at
+the tasks or wander off to read something else. It is sent every morning, empty
+days included, and says so explicitly — a silent morning is indistinguishable
+from a job that never ran — and if the provider is unreachable the same data is
+rendered without a model and sent anyway. "The calendar could not be read" and
+"there is nothing in the calendar" are kept as different answers.
+
+Its schedule lives in the database rather than in the environment, because the
+natural way to change it is to ask: `BRIEFING_TIME` seeds the row on first start
+and is ignored afterwards, and `set_briefing_time` reschedules the job in the
+same call. The schedule is a cron carrying an IANA timezone, so 07:30 stays
+07:30 across daylight saving. One briefing per day is enforced by a conditional
+update rather than by trusting the queue, and the claim is released if the send
+fails, so a retry can still deliver.
+
+Every tool call and every turn is recorded in `audit_events`: which tool, the
+outcome, the error code, the latency, and for a turn the model, the round trips
+and the token counters. What is **not** recorded is argument values. Tool
+arguments are the user's own words, and this is the only table kept for months,
+so what goes in is the name, type and size of each argument — enough to measure
+whether the model picks the right tool and fills it in correctly, not enough to
+reconstruct a sentence anyone said. A failed audit write is logged and swallowed:
+it must never fail the action it describes. A daily sweep drops rows older than
+`AUDIT_RETENTION_DAYS`.
+
+## Backups
+
+```bash
+./scripts/backup-db.sh                 # → backups/assistant-<timestamp>.dump
+./scripts/backup-db.sh /mnt/elsewhere  # somewhere that survives this machine
+```
+
+The backup is a `pg_dump` archive, not a copy of the Docker volume: a volume is
+tied to this Postgres version and this host, a dump restores anywhere. The
+script reads its credentials from the same `.env` compose uses, and then reads
+the archive's table of contents back — a dump that cannot be read is not a
+backup.
+
+Restoring is the half that is usually never tested, so it is one command, and it
+takes a target database so it can be tested without touching the live one:
+
+```bash
+docker compose stop assistant
+./scripts/restore-db.sh backups/assistant-<timestamp>.dump scratch_check  # rehearsal
+./scripts/restore-db.sh backups/assistant-<timestamp>.dump                # the real thing
+docker compose start assistant
+```
+
+Restoring into the live database asks for the database name first. Google
+Calendar is not part of any of this: it is authoritative for appointments and
+holds its own history.
+
 ## Security
 
 Access control: the bot answers only in private chats, and only to the numeric
 Telegram user IDs listed in `TELEGRAM_ALLOWED_USER_IDS` — an empty allowlist
 rejects everyone. The container runs as a non-root user, and the LLM is never
 given generic shell or SQL access, only typed tools.
+
+Nothing personal is retained beyond what the assistant is asked to remember. The
+audit trail stores argument shapes rather than argument values, logs redact
+anything that looks like a secret, and Google credentials are a service-account
+key file kept out of the repository. Deletions cannot happen without an explicit
+confirmation in a separate message.
 
 ## License
 
