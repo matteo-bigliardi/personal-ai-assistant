@@ -25,7 +25,7 @@
     "eval": "tsx --env-file-if-exists=.env evals/run.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
+    "@anthropic-ai/sdk": "^0.123.0",
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "googleapis": "^178.0.0",
