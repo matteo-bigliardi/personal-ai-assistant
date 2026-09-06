@@ -18,6 +18,95 @@ What remains before V1 is a synthetic eval set and a round of real use.
 TypeScript · Node 24 · grammY (Telegram) · Hono (health) · PostgreSQL + Drizzle ·
 pg-boss (jobs) · Anthropic SDK · Vitest · Docker Compose.
 
+## Using it
+
+There are no commands to learn: you write to the bot the way you would write to
+a person, and it answers in whatever language you wrote in. `/start` exists and
+only says hello.
+
+**Projects and tasks**
+
+```text
+Create project Atlas.
+Add "prepare the demo" to Atlas for Friday.
+What's open on Atlas?
+What's due today?
+Mark the demo one done.
+```
+
+Projects are addressed by name. Task titles are not, so a listing shows a short
+id next to each one — "the demo one" works because the assistant has just read
+the list, and a reference it cannot narrow to exactly one task is refused rather
+than guessed. A task with no date is fine; asked for something vague like
+"soon", it will ask rather than invent a deadline.
+
+**Time**
+
+```text
+I'm starting on Atlas.
+Stop the timer.
+I worked on Atlas yesterday from 14:00 to 16:30.
+How much time did I spend on Atlas this week?
+```
+
+One timer runs at a time, and starting a second is refused with the name of the
+one already running rather than silently stopping it. A report covers today,
+this week, this month or a pair of dates, and counts a running timer up to now,
+listed separately so the total does not look more final than it is.
+
+**Reminders**
+
+```text
+Remind me to check the build in 45 minutes.
+Remind me to call the bank tomorrow at 9.
+What reminders do I have?
+Snooze the build one 20 minutes.
+Cancel the bank one.
+```
+
+A reminder arrives with `[Done] [Snooze 10m] [Snooze 1h]` attached, so the usual
+answer is one tap. Delivery does not go through the model, and a reminder that
+came due while the app was down is delivered late rather than dropped.
+
+**Calendar**
+
+```text
+What's on my calendar today?
+And tomorrow?
+Put a meeting on Friday from 15:00 to 15:30.
+Move the design review to 17:00.
+Find me two free hours tomorrow afternoon.
+```
+
+**The morning briefing**
+
+It arrives on its own, every morning, and says so even when there is nothing to
+report. The time is changed by asking, not by editing the environment:
+
+```text
+What time do you send the briefing?
+Send it at 8:05.
+```
+
+**Deleting things**
+
+Deleting a calendar event and archiving a project stop and ask first, and the
+answer has to come in the next message:
+
+```text
+Delete the design review.
+→ About to permanently delete "Design review", today 14:00–15:00. Confirm?
+Yes.
+```
+
+Nothing has happened at the point where it asks — the request is held server
+side and the same call only runs after you have answered. There is no
+`delete_project` and no `delete_task`: archiving and cancelling are the soft
+deletes, and both keep their history.
+
+Finally, when a request is not something it can do — "email me the summary" —
+it says so plainly instead of implying it was done.
+
 ## Architecture (V1)
 
 ```
