@@ -25,14 +25,14 @@
     "eval": "tsx --env-file-if-exists=.env evals/run.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
+    "@anthropic-ai/sdk": "^0.124.0",
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "googleapis": "^178.0.0",
     "grammy": "^1.31.0",
-    "hono": "^4.6.14",
+    "hono": "^4.13.7",
     "pg": "^8.13.1",
-    "pg-boss": "^12.29.0",
+    "pg-boss": "^12.30.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
